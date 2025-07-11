@@ -108,8 +108,8 @@ class MainWindow(QMainWindow):
             if target == "lora" and self.reader:
                 self.reader.stop()
                 self.reader.join()
-                if self.reader.Port.is_open:
-                    self.reader.Port.close()
+                if self.reader.serial_port.is_open:
+                    self.reader.serial_port.close()
                 self.reader = None
 
             elif (
