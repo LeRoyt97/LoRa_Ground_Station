@@ -57,26 +57,24 @@ class MainWindow(QMainWindow):
         self.starting_elevation = None
 
         # === Connect ComboBox Refreshes ===
-        self.refresh_ports(self.LoRaComboBox,
-                           self.lora_port_names,
-                           "lora")
-        self.refresh_ports(self.ArduinoComboBox,
-                           self.arduino_port_names,
-                           "arduino")
+        self.refresh_ports(
+            self.LoRaComboBox,
+            self.lora_port_names,
+            "lora"
+        )
+        self.refresh_ports(
+            self.ArduinoComboBox,
+            self.arduino_port_names,
+            "arduino"
+        )
 
         # === Connect Serial Port Buttons ===
         self.LoRaRefreshButton.clicked.connect(
-            lambda: self.refresh_ports(
-                self.LoRaComboBox,
-                self.lora_port_names,
-                "lora")
+            lambda: self.refresh_ports(self.LoRaComboBox, self.lora_port_names, "lora")
         )
         self.LoRaSelectButton.clicked.connect(self.start_lora_reader)
         self.ArduinoRefreshButton.clicked.connect(
-            lambda: self.refresh_ports(
-                self.ArduinoComboBox,
-                self.arduino_port_names,
-                "arduino"
+            lambda: self.refresh_ports(self.ArduinoComboBox, self.arduino_port_names, "arduino"
             )
         )
         self.ArduinoSelectButton.clicked.connect(self.start_arduino)
