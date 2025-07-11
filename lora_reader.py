@@ -44,6 +44,7 @@ class LoraReader(threading.Thread):
             port: Serial port identifier (e.g., 'COM3', '/dev/ttyUSB0')
             baudrate: Serial communication baud rate, defaults to 115200
             callback: Optional callback object with emit() method for data forwarding
+            window: handle to window class
 
         Raises:
             serial.SerialException: If serial port cannot be opened or configured
