@@ -7,6 +7,7 @@ from PyQt5.uic import loadUi
 import sys
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QObject, QThread
 import serial
+import serial.tools.list_ports
 import time
 from ground_station_arduino import GroundStationArduino
 from satellite_tracking_math import TrackingMath
@@ -17,10 +18,11 @@ import statistics
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 # todo: LeRoy: Reorganize GUI: Make status_box always visible, so returns/feedback can be seen during setup.
-#todo: Clean up unused Debug prints. Some don't have "Debug" in them
-#todo: save serial monitor data to a .txt file
-#todo: calculate distance from balloon
+# todo: Clean up unused Debug prints. Some don't have "Debug" in them
+# todo: save serial monitor data to a .txt file
+# todo: calculate distance from balloon
 class MainWindow(QMainWindow):
     log_signal = pyqtSignal(str)
 
@@ -30,60 +32,70 @@ class MainWindow(QMainWindow):
         their respective handler methods.
         """
         super(MainWindow, self).__init__()
-        loadUi('LoRa_Designer.ui', self)
+        loadUi("LoRa_Designer.ui", self)
 
-        # Reader placeholder
+        # === Hardware Interfaces and Threads ===
         self.reader = None
+        self.ground_station_arduino = None
+        self.track_thread = None
+        self.worker = None
 
-        self.is_arduino_connected = False
-        self.is_ground_station_location_set = False
-        self.is_calibrated = False
+        # === Serial Port Management ===
+        self.ports = None
         self.lora_port_names = []
         self.arduino_port_names = []
+
+        # === State Flags ===
+        self.is_arduino_connected = False
+        self.is_calibrated = False
+        self.is_ground_station_location_set = False
         self.is_lora_listening = False
-        self.is_tracking = False
         self.is_predicting_track = False
+        self.is_tracking = False
 
-        self.ground_station_arduino = None  # classes will be instantiated later
-
-        self.ports = None
-
+        # === Ground Station Parameters ===
+        self.GroundStationArduino = None
         self.ground_station_latitude = None
         self.ground_station_longitude = None
         self.ground_station_altitude = None
+        self.starting_azimuth = None
+        self.starting_elevation = None
 
-        # self.log_signal.connect(self.display_data)
-        # todo: LeRoy: fix issue that makes it so you need to refresh the ports before any can be selected -- Done: Now Test
-        # Fill ComboBox initially
+        # === Connect ComboBox Refreshes ===
         self.refresh_ports(self.LoRaComboBox, self.lora_port_names, "lora")
         self.refresh_ports(self.ArduinoComboBox, self.arduino_port_names, "arduino")
 
-        # Connect Serial Port Buttons
-        self.LoRaRefreshButton.clicked.connect(lambda: self.refresh_ports(self.LoRaComboBox, self.lora_port_names, "lora"))
+        # === Connect Serial Port Buttons ===
+        self.LoRaRefreshButton.clicked.connect(
+            lambda: self.refresh_ports(self.LoRaComboBox, self.lora_port_names, "lora")
+        )
         self.LoRaSelectButton.clicked.connect(self.start_lora_reader)
-        self.ArduinoRefreshButton.clicked.connect(lambda: self.refresh_ports(self.ArduinoComboBox, self.arduino_port_names, "arduino"))
+        self.ArduinoRefreshButton.clicked.connect(
+            lambda: self.refresh_ports(
+                self.ArduinoComboBox, self.arduino_port_names, "arduino"
+            )
+        )
         self.ArduinoSelectButton.clicked.connect(self.start_arduino)
         self.ClearSerialButton.clicked.connect(self.clear_serial)
 
-        # Connect Adjustment Buttons
+        # === Connect Adjustment Buttons ===
         self.UpButton.clicked.connect(self.tilt_up)
         self.DownButton.clicked.connect(self.tilt_down)
-        self.log_signal.connect(self.display_data)
         self.ClockWiseButton.clicked.connect(self.pan_counter_clockwise)
         self.CounterClockeWiseButton.clicked.connect(self.pan_clockwise)
+        self.log_signal.connect(self.display_data)
 
-        # Connect SetUp Buttons
+        # === Connect SetUp Buttons ===
         self.setGSLocationButton.clicked.connect(self.set_ground_station_location)
         self.calculateStartingPosButton.clicked.connect(self.get_starting_position)
         self.returnToSunButton.clicked.connect(self.return_to_sun)
         self.setStartingPosButton.clicked.connect(self.calibrate)
 
-        # Connect Start and Stop Buttons
+        # === Connect Start and Stop Buttons ===
         self.startButton.clicked.connect(self.check_if_ready)
         self.stopButton.clicked.connect(self.stop_tracking)
         self.EStopButton.clicked.connect(self.emergency_stop)
         self.predictionStartButton.clicked.connect(self.set_predict_track)
-
 
     def refresh_ports(self, combo_box, port_names_list: list, target: str) -> None:
         """Refresh available serial ports in combo box.
@@ -91,7 +103,7 @@ class MainWindow(QMainWindow):
         Args:
             combo_box: Qt combo box widget to populate with port descriptions
             port_names_list: List to store corresponding port device names
-            target: Either "arduino" or "lora"
+            target: "arduino" or "lora"
         """
         try:
             if target == "lora" and self.reader:
@@ -103,9 +115,9 @@ class MainWindow(QMainWindow):
                 self.reader = None
 
             elif (
-                    target == "arduino"
-                    and self.GroundStationArduino
-                    and self.GroundStationArduino.com_port.is_open
+                target == "arduino"
+                and self.GroundStationArduino
+                and self.GroundStationArduino.com_port.is_open
             ):
                 self.GroundStationArduino.com_port.close()
                 self.GroundStationArduino = None
@@ -114,13 +126,13 @@ class MainWindow(QMainWindow):
             combo_box.clear()
             port_names_list.clear()
             ports = serial.tools.list_ports.comports()
+
             for port_info in sorted(ports, key=lambda p: p.device):
                 combo_box.addItem(port_info.description)
                 port_names_list.append(port_info.device)
-        except Exception as e:
-            print(f"Refresh ports error: {e}")
-            self.statusBox.append(f"Refresh ports error: {e}")
-
+        except Exception as err:
+            print(f"Refresh ports error: {err}")
+            self.statusBox.append(f"Refresh ports error: {err}")
 
     def start_lora_reader(self) -> None:
         """Start LoRa reader thread for receiving telemetry data.
@@ -128,19 +140,22 @@ class MainWindow(QMainWindow):
         # print("Select button clicked")
         selected_index = self.LoRaComboBox.currentIndex()
 
-        if not self.is_lora_listening and 0 <= selected_index < len(self.lora_port_names):
+        if not self.is_lora_listening and 0 <= selected_index < len(
+            self.lora_port_names
+        ):
             selected_port = self.lora_port_names[selected_index]
             self.statusBox.setPlainText(f"LoRa Connecting to {selected_port}")
             try:
-                self.reader = LoraReader(selected_port, callback=self.log_signal)
+                self.reader = LoraReader(
+                    port=selected_port, window=self, callback=self.log_signal
+                )
                 self.reader.start()
                 self.is_lora_listening = True
-            except Exception as e:
-                self.log_signal.emit(f"Error in LoRaReader: {e}")
+            except Exception as err:
+                self.log_signal.emit(f"Error in LoRaReader: {err}")
             # print("LoRaReader thread Started")
         else:
             self.log_signal.emit("No valid LoRa port selected")
-
 
     def start_arduino(self) -> None:
         """Initialize and connect to Arduino ground station controller.
@@ -151,7 +166,10 @@ class MainWindow(QMainWindow):
 
         selected_index = self.ArduinoComboBox.currentIndex()
 
-        if not self.is_arduino_connected and 0 <= selected_index < self.ArduinoComboBox.count():
+        if (
+            not self.is_arduino_connected
+            and 0 <= selected_index < self.ArduinoComboBox.count()
+        ):
             try:
                 selected_port = self.arduino_port_names[selected_index]
                 self.ground_station_arduino = GroundStationArduino(selected_port, 9600)
@@ -159,8 +177,8 @@ class MainWindow(QMainWindow):
                 self.AdjustmentLogBox.append("Connected to {selected_port}!")
                 self.statusBox.append(f"Connected to {selected_port}!")
                 self.is_arduino_connected = True
-            except Exception as e:
-                self.statusBox.append(f"Failed to connect Arduino: {e}")
+            except Exception as err:
+                self.statusBox.append(f"Failed to connect Arduino: {err}")
         elif self.is_arduino_connected:
             self.AdjustmentLogBox.setPlainText("Arduino already connected")
             self.statusBox.append("Arduino already connected")
@@ -169,62 +187,79 @@ class MainWindow(QMainWindow):
             self.AdjustmentLogBox.setPlainText("Unable to connect to Arduino")
         return
 
-
     def tilt_up(self) -> None:
         """Tilt ground station antenna upward by configured degrees.
         """
         # if an arduino is connected, uses ground_station_arduino to adjust the tilt up
         if self.is_arduino_connected:
-            self.ground_station_arduino.adjust_tilt_up(self.degreesPerClickBox.currentText())
-            self.AdjustmentLogBox.setPlainText("adjusting tilt up " + self.degreesPerClickBox.currentText() + " degrees")
+            self.ground_station_arduino.adjust_tilt_up(
+                self.degreesPerClickBox.currentText()
+            )
+            self.AdjustmentLogBox.setPlainText(
+                "adjusting tilt up "
+                + self.degreesPerClickBox.currentText()
+                + " degrees"
+            )
         else:
             print("Unable to connect to ground station motors")
             self.AdjustmentLogBox.setPlainText("Not connected to ground station motors")
 
         return
-
 
     def tilt_down(self) -> None:
         """Tilt ground station antenna downward by configured degrees.
         """
         # if an arduino is connected, uses ground_station_arduino to adjust the tilt down
         if self.is_arduino_connected:
-            self.ground_station_arduino.adjust_tilt_down(self.degreesPerClickBox.currentText())
-            self.AdjustmentLogBox.setPlainText("adjusting tilt down " + self.degreesPerClickBox.currentText() + " degrees")
+            self.ground_station_arduino.adjust_tilt_down(
+                self.degreesPerClickBox.currentText()
+            )
+            self.AdjustmentLogBox.setPlainText(
+                "adjusting tilt down "
+                + self.degreesPerClickBox.currentText()
+                + " degrees"
+            )
         else:
             print("Unable to connect to ground station motors")
             self.AdjustmentLogBox.setPlainText("Not connected to ground station motors")
 
         return
-
 
     def pan_counter_clockwise(self) -> None:
         """Pan ground station antenna counter-clockwise by configured degrees.
         """
         # if an arduino is connected, uses ground_station_arduino to adjust the pan counter-clockwise
         if self.is_arduino_connected:
-            self.ground_station_arduino.adjust_pan_negative(self.degreesPerClickBox.currentText())
-            self.AdjustmentLogBox.setPlainText("adjusting pan " + self.degreesPerClickBox.currentText() + " Counter Clockwise")
+            self.ground_station_arduino.adjust_pan_negative(
+                self.degreesPerClickBox.currentText()
+            )
+            self.AdjustmentLogBox.setPlainText(
+                "adjusting pan "
+                + self.degreesPerClickBox.currentText()
+                + " Counter Clockwise"
+            )
         else:
             print("Unable to connect to ground station motors")
             self.AdjustmentLogBox.setPlainText("Not connected to ground station motors")
 
         return
-
 
     def pan_clockwise(self) -> None:
         """Pan ground station antenna clockwise by configured degrees.
         """
         # if an arduino is connected, uses ground_station_arduino to adjust the pan clockwise
         if self.is_arduino_connected:
-            self.ground_station_arduino.adjust_pan_positive(self.degreesPerClickBox.currentText())
-            self.AdjustmentLogBox.setPlainText("adjusting pan " + self.degreesPerClickBox.currentText() + " Clockwise")
+            self.ground_station_arduino.adjust_pan_positive(
+                self.degreesPerClickBox.currentText()
+            )
+            self.AdjustmentLogBox.setPlainText(
+                "adjusting pan " + self.degreesPerClickBox.currentText() + " Clockwise"
+            )
         else:
             print("Unable to connect to ground station motors")
             self.AdjustmentLogBox.setPlainText("Not connected to ground station motors")
 
         return
-
 
     def display_data(self, data: str) -> None:
         """Display received data in status box.
@@ -268,10 +303,11 @@ class MainWindow(QMainWindow):
                 self.is_ground_station_location_set = False
         except ValueError:
             print("numbers only for GPS location (decimal degrees)")
-            self.statusBox.append("Invalid GPS location entered. Please only enter numbers")
-        except Exception as e:
-            self.statusBox.append(f"set_ground_station_location error: {e}")
-
+            self.statusBox.append(
+                "Invalid GPS location entered. Please only enter numbers"
+            )
+        except Exception as err:
+            self.statusBox.append(f"set_ground_station_location error: {err}")
 
     def get_starting_position(self) -> None:
         """Calculate sun position for ground station calibration.
@@ -286,7 +322,14 @@ class MainWindow(QMainWindow):
         try:
             if self.is_ground_station_location_set:
                 now = datetime.datetime.now(tz=datetime.timezone.utc)
-                azimuth, elevation = sunpos(now, self.ground_station_latitude, self.ground_station_longitude, self.ground_station_altitude)[:2]  # discard RA, dec, H
+                azimuth, elevation = sunpos(
+                    now,
+                    self.ground_station_latitude,
+                    self.ground_station_longitude,
+                    self.ground_station_altitude,
+                )[
+                    :2
+                ]  # discard RA, dec, H
 
                 self.starting_azimuth = azimuth
                 self.starting_elevation = elevation
@@ -295,14 +338,15 @@ class MainWindow(QMainWindow):
                 self.startingElevationBox.setText(str(elevation))
 
             else:
-                self.statusBox.append("Please set ground station location "
-                                            "and point at the sun using solar sight")
-        except Exception as e:
-            self.statusBox.append(f"get_starting_position error: {e}")
-            print("get_starting_position error: ", e)
+                self.statusBox.append(
+                    "Please set ground station location "
+                    "and point at the sun using solar sight"
+                )
+        except Exception as err:
+            self.statusBox.append(f"get_starting_position error: {err}")
+            print("get_starting_position error: ", err)
 
         return
-
 
     def calibrate(self) -> None:
         """Calibrate ground station with starting azimuth and elevation values.
@@ -317,32 +361,46 @@ class MainWindow(QMainWindow):
                 starting_azimuth = float(starting_azimuth_string)
                 print(starting_azimuth)
 
-                starting_elevation_string = self.startingElevationBox.toPlainText().strip()
+                starting_elevation_string = (
+                    self.startingElevationBox.toPlainText().strip()
+                )
                 starting_elevation = float(starting_elevation_string)
                 print(starting_elevation)
 
-                self.ground_station_arduino.calibrate(starting_azimuth, starting_elevation)
+                self.ground_station_arduino.calibrate(
+                    starting_azimuth, starting_elevation
+                )
                 self.is_calibrated = True
                 self.statusBox.append("Successfully calibrated!")
             except ValueError:
                 print("numbers only for initial azimuth and elevation")
                 self.statusBox.append("Invalid input for initial azimuth and elevation")
-            except Exception as e:
-                print(f"calibrate error: {e}")
-                self.statusBox.append(f"calibrate error: {e}")
+            except Exception as err:
+                print(f"calibrate error: {err}")
+                self.statusBox.append(f"calibrate error: {err}")
         else:
             print("not connected to arduino")
             self.statusBox.append("Not connected to arduino")
 
         return
 
-
-    def return_to_sun(self) -> None:
+    def return_to_sun(self):
         """Point ground station back to current sun position.
         """
-        if self.is_arduino_connected and self.is_ground_station_location_set and self.is_calibrated:
+        if (
+            self.is_arduino_connected
+            and self.is_ground_station_location_set
+            and self.is_calibrated
+        ):
             now = datetime.datetime.now(tz=datetime.timezone.utc)
-            azimuth, elevation = sunpos(now, self.ground_station_latitude, self.ground_station_longitude, self.ground_station_altitude)[:2]  # discard RA, dec, H
+            azimuth, elevation = sunpos(
+                now,
+                self.ground_station_latitude,
+                self.ground_station_longitude,
+                self.ground_station_altitude,
+            )[
+                :2
+            ]  # discard RA, dec, H
 
             self.ground_station_arduino.move_position(azimuth, elevation)
 
@@ -354,11 +412,12 @@ class MainWindow(QMainWindow):
             self.statusBox.append("at new sun position")
 
         else:
-            self.statusBox.append("Ensure that arduino is connected, GS location is set and calibration is set")
+            self.statusBox.append(
+                "Ensure that arduino is connected, GS location is set and calibration is set"
+            )
             print("Cannot point back at the sun")
 
         return
-
 
     def set_predict_track(self) -> None:
         """Enable predictive tracking mode and check system readiness.
@@ -368,7 +427,6 @@ class MainWindow(QMainWindow):
         self.is_predicting_track = True
         self.check_if_ready()
         return
-
 
     def check_if_ready(self) -> bool:
         """Verify all systems are ready for tracking operation.
@@ -406,7 +464,12 @@ class MainWindow(QMainWindow):
 
             print("\n")
 
-            if self.is_arduino_connected and self.is_lora_listening and self.is_calibrated and self.is_ground_station_location_set:
+            if (
+                self.is_arduino_connected
+                and self.is_lora_listening
+                and self.is_calibrated
+                and self.is_ground_station_location_set
+            ):
 
                 if self.is_predicting_track:
                     self.statusBox.append("Starting tracking with predictions!")
@@ -419,9 +482,8 @@ class MainWindow(QMainWindow):
             else:
                 print("not ready to track yet")
                 return False
-        except Exception as e:
-            print(f"check_if_ready error: {e}")
-
+        except Exception as err:
+            print(f"check_if_ready error: {err}")
 
     def call_track(self) -> None:
         """Start basic tracking thread without prediction.
@@ -439,8 +501,12 @@ class MainWindow(QMainWindow):
 
             self.track_thread.started.connect(self.worker.track)
 
-            self.worker.finished.connect(self.track_thread.quit)  # pycharm has bug, this is correct
-            self.worker.finished.connect(self.worker.deleteLater)  # https://youtrack.jetbrains.com/issue/PY-24183?_ga=2.240219907.1479555738.1625151876-2014881275.1622661488
+            self.worker.finished.connect(
+                self.track_thread.quit
+            )  # pycharm has bug, this is correct
+            self.worker.finished.connect(
+                self.worker.deleteLater
+            )  # https://youtrack.jetbrains.com/issue/PY-24183?_ga=2.240219907.1479555738.1625151876-2014881275.1622661488
             self.track_thread.finished.connect(self.track_thread.deleteLater)
 
             self.startButton.setEnabled(False)
@@ -448,9 +514,8 @@ class MainWindow(QMainWindow):
             self.setStartingPosButton.setEnabled(False)
 
             self.track_thread.start()
-        except Exception as e:
-            print(f"call_track error: {e}")
-
+        except Exception as err:
+            print(f"call_track error: {err}")
 
     def call_predict_track(self) -> None:
         """Start tracking thread with predictive capabilities.
@@ -468,8 +533,12 @@ class MainWindow(QMainWindow):
 
         self.track_thread.started.connect(self.worker.predict_track)
 
-        self.worker.finished.connect(self.track_thread.quit)  # pycharm has bug, this is correct
-        self.worker.finished.connect(self.worker.deleteLater)  # https://youtrack.jetbrains.com/issue/PY-24183?_ga=2.240219907.1479555738.1625151876-2014881275.1622661488
+        self.worker.finished.connect(
+            self.track_thread.quit
+        )  # pycharm has bug, this is correct
+        self.worker.finished.connect(
+            self.worker.deleteLater
+        )  # https://youtrack.jetbrains.com/issue/PY-24183?_ga=2.240219907.1479555738.1625151876-2014881275.1622661488
         self.track_thread.finished.connect(self.track_thread.deleteLater)
 
         self.startButton.setEnabled(False)
@@ -477,7 +546,6 @@ class MainWindow(QMainWindow):
         self.setStartingPosButton.setEnabled(False)
 
         self.track_thread.start()
-
 
     def stop_tracking(self) -> None:
         """Stop current tracking operation and reset UI controls.
@@ -492,7 +560,6 @@ class MainWindow(QMainWindow):
             self.statusBox.append("tracking stopped")
         return
 
-
     def emergency_stop(self) -> None:
         """Execute emergency stop procedure for ground station.
         """
@@ -500,11 +567,12 @@ class MainWindow(QMainWindow):
             self.ground_station_arduino.send_emergency_stop()
             self.stop_tracking()
 
-            self.statusBox.append("E-Stop triggered \n Please recalibrate before starting again")
+            self.statusBox.append(
+                "E-Stop triggered \n Please recalibrate before starting again"
+            )
             print("E-Stopped must recalibrate before starting tracking")
 
         return
-
 
     def display_calculations(self, distance: float, azimuth: float, elevation: float) -> None:
         """Display tracking calculations on GUI.
@@ -545,7 +613,6 @@ class Worker(QObject):
     finished = pyqtSignal()
     calculation_signal = pyqtSignal(float, float, float)
 
-
     def __init__(self, reader) -> None:
         """Initialize worker thread for tracking operations.
         
@@ -580,34 +647,54 @@ class Worker(QObject):
 
                 if (time.time() - timer) > 5.0:
                     timer = time.time()
-                    balloon_coordinates = [self.reader.data.latitude, self.reader.data.longitude, self.reader.data.altitude]
+                    balloon_coordinates = [
+                        self.reader.data.latitude,
+                        self.reader.data.longitude,
+                        self.reader.data.altitude,
+                    ]
                     if not balloon_coordinates:
                         pass
                     else:
                         # note that TrackingMath takes arguments as lat, long, altitude
-                        tracking_calculation = TrackingMath(main_window.ground_station_latitude, main_window.ground_station_longitude, main_window.ground_station_altitude, *balloon_coordinates)
+                        tracking_calculation = TrackingMath(
+                            main_window.ground_station_latitude,
+                            main_window.ground_station_longitude,
+                            main_window.ground_station_altitude,
+                            *balloon_coordinates,
+                        )
 
                         distance = tracking_calculation.distance
                         new_elevation = tracking_calculation.elevation()
                         new_azimuth = tracking_calculation.azimuth()
 
-                        print(str(self.iteration_count) + " Distance " + str(distance) + " Azimuth: " + str(
-                            new_azimuth) + ", Elevation: " + str(new_elevation))
+                        print(
+                            str(self.iteration_count)
+                            + " Distance "
+                            + str(distance)
+                            + " Azimuth: "
+                            + str(new_azimuth)
+                            + ", Elevation: "
+                            + str(new_elevation)
+                        )
 
                         self.calculation_signal.connect(
-                            main_window.display_calculations)  # this seems to happen a lot for some reason
-                        self.calculation_signal.emit(distance, new_azimuth, new_elevation)
+                            main_window.display_calculations
+                        )  # this seems to happen a lot for some reason
+                        self.calculation_signal.emit(
+                            distance, new_azimuth, new_elevation
+                        )
 
-                        main_window.ground_station_arduino.move_position(new_azimuth, new_elevation)
+                        main_window.ground_station_arduino.move_position(
+                            new_azimuth, new_elevation
+                        )
 
                         self.iteration_count += 1
-
 
             print("All done!")
             self.finished.emit()  # same pycharm bug as above
             return
-        except Exception as e:
-            print(f"error in tracking while {e}")
+        except Exception as err:
+            print(f"error in tracking while {err}")
 
     def predict_track(self) -> None:
         """Execute predictive tracking algorithm.
@@ -633,8 +720,16 @@ class Worker(QObject):
         print("In predict_track")
 
         timer = time.time()
-        newest_location = [self.reader.data.latitude, self.reader.data.longitude, self.reader.data.altitude]
-        old_location = [self.reader.data.latitude, self.reader.data.longitude, self.reader.data.altitude]
+        newest_location = [
+            self.reader.data.latitude,
+            self.reader.data.longitude,
+            self.reader.data.altitude,
+        ]
+        old_location = [
+            self.reader.data.latitude,
+            self.reader.data.longitude,
+            self.reader.data.altitude,
+        ]
         prediction_step = 1
 
         calculations = open("predictedOutput.csv", "w")
@@ -648,7 +743,11 @@ class Worker(QObject):
         while main_window.is_predicting_track:
             if (time.time() - timer) > 1:
                 timer = time.time()
-                current_data = [self.reader.data.latitude, self.reader.data.longitude, self.reader.data.altitude]
+                current_data = [
+                    self.reader.data.latitude,
+                    self.reader.data.longitude,
+                    self.reader.data.altitude,
+                ]
 
                 if newest_location == current_data:
                     # need to predict!
@@ -659,9 +758,14 @@ class Worker(QObject):
                     longitude_step = (newest_location[1] - old_location[1]) / time_delta
                     altitude_step = (newest_location[2] - old_location[2]) / time_delta
 
-                    tracking_calculation = TrackingMath(main_window.ground_station_latitude, main_window.ground_station_longitude, main_window.ground_station_altitude,
-                                              newest_location[1] + (prediction_step * longitude_step), newest_location[0] + (prediction_step * latitude_step),
-                                              newest_location[2] + (prediction_step * altitude_step))
+                    tracking_calculation = TrackingMath(
+                        main_window.ground_station_latitude,
+                        main_window.ground_station_longitude,
+                        main_window.ground_station_altitude,
+                        newest_location[1] + (prediction_step * longitude_step),
+                        newest_location[0] + (prediction_step * latitude_step),
+                        newest_location[2] + (prediction_step * altitude_step),
+                    )
 
                     distance = tracking_calculation.distance
                     new_elevation = tracking_calculation.elevation()
@@ -691,7 +795,9 @@ class Worker(QObject):
                     row = [distance, new_azimuth, new_elevation, "p"]
                     csv_writer.writerow(row)
 
-                    main_window.ground_station_arduino.move_position(new_azimuth, new_elevation)
+                    main_window.ground_station_arduino.move_position(
+                        new_azimuth, new_elevation
+                    )
 
                     prediction_step += 1
 
@@ -701,14 +807,20 @@ class Worker(QObject):
                     newest_location = current_data
 
                     # note that TrackingMath takes arguments as lat, long, alt
-                    tracking_calculation = TrackingMath(main_window.ground_station_latitude, main_window.ground_station_longitude, main_window.ground_station_altitude, *current_data)
+                    tracking_calculation = TrackingMath(
+                        main_window.ground_station_latitude,
+                        main_window.ground_station_longitude,
+                        main_window.ground_station_altitude,
+                        *current_data,
+                    )
 
                     distance = tracking_calculation.distance
                     new_elevation = tracking_calculation.elevation()
                     new_azimuth = tracking_calculation.azimuth()
 
                     self.calculation_signal.connect(
-                        main_window.display_calculations)  # this seems to happen a lot for some reason
+                        main_window.display_calculations
+                    )  # this seems to happen a lot for some reason
                     self.calculation_signal.emit(distance, new_azimuth, new_elevation)
 
                     print("Got new real ping!")
@@ -716,7 +828,9 @@ class Worker(QObject):
                     print("elevation: " + str(new_elevation))
                     print("azimuth: " + str(new_azimuth) + "\n")
 
-                    main_window.ground_station_arduino.move_position(new_azimuth, new_elevation)
+                    main_window.ground_station_arduino.move_position(
+                        new_azimuth, new_elevation
+                    )
 
                     row = [distance, new_azimuth, new_elevation, "r"]
                     csv_writer.writerow(row)
@@ -729,10 +843,9 @@ class Worker(QObject):
         calculations.close()
         self.finished.emit()
         return
-#
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     app = QApplication(sys.argv)
     main_window = MainWindow()
