@@ -3,6 +3,7 @@ import re
 import serial
 import threading
 
+
 @dataclasses.dataclass
 class LoraDataObject:
     """Data container for LoRa telemetry information.
@@ -13,16 +14,17 @@ class LoraDataObject:
     Attributes:
         identifier_one: Primary identifier string for the transmitter
         latitude: Geographic latitude in decimal degrees (-90 to +90)
-        longitude: Geographic longitude in decimal degrees (-180 to +180) 
+        longitude: Geographic longitude in decimal degrees (-180 to +180)
         altitude: Altitude above sea level in meters
         last_sent: Timestamp or sequence number of last transmission sent
         last_complete: Timestamp or sequence number of last complete transmission
         identifier_two: Secondary identifier string for validation
-        
+
     Note:
         Used for safety-critical balloon tracking operations. Coordinate
         accuracy is essential for ground station pointing calculations.
     """
+
     identifier_one: str
     latitude: float
     longitude: float
@@ -33,27 +35,29 @@ class LoraDataObject:
 
 
 class LoraReader(threading.Thread):
-    def __init__(self, port: str, baudrate: int = 115200, callback=None) -> None:
+    def __init__(
+        self, port: str, window, baudrate: int = 115200, callback=None
+    ) -> None:
         """Initialize LoRa reader thread for telemetry reception.
 
         Args:
             port: Serial port identifier (e.g., 'COM3', '/dev/ttyUSB0')
             baudrate: Serial communication baud rate, defaults to 115200
             callback: Optional callback object with emit() method for data forwarding
-            
+
         Raises:
             serial.SerialException: If serial port cannot be opened or configured
-            
+
         Note:
             Thread-safe initialization. Serial port is opened immediately.
             Call start() to begin reading data in separate thread.
         """
         super().__init__()
+        self.window = window
         self.data = None
         self.serial_port = serial.Serial(port=port, baudrate=baudrate, timeout=1)
         self.callback = callback
         self.is_running = True
-
 
     def run(self) -> None:
         """Main thread execution loop for continuous LoRa data reception.
@@ -71,7 +75,11 @@ class LoraReader(threading.Thread):
                 if self.serial_port.in_waiting > 0:
                     print("Debug: LoRa Run if")
                     # TODO:LeRoy: Check that error handling works
-                    line = self.serial_port.readline().decode('utf-8', errors="replace").strip()
+                    line = (
+                        self.serial_port.readline()
+                        .decode("utf-8", errors="replace")
+                        .strip()
+                    )
                     if line:
                         print(line)
                         self.data = self.parse_lora_data(line)
@@ -83,7 +91,7 @@ class LoraReader(threading.Thread):
             if self.callback:
                 self.callback.emit(f"Error in LoRaReader: {e}")
         finally:
-            if 'serial_connection' in locals() and self.serial_port.is_open:
+            if "serial_connection" in locals() and self.serial_port.is_open:
                 self.serial_port.close()
                 print("Serial Port closed")
 
@@ -95,7 +103,6 @@ class LoraReader(threading.Thread):
         """
         self.is_running = False
 
-
     def parse_lora_data(self, line: str):
         """Parse raw LoRa data string into structured telemetry object.
 
@@ -104,23 +111,28 @@ class LoraReader(threading.Thread):
 
         Args:
             line: Raw LoRa data string from serial port
-            
+
         Returns:
             LoraDataObject: Parsed telemetry data on successful parsing
-            
+
         Raises:
             ValueError: On coordinate conversion errors (handled internally)
             IndexError: On insufficient field count (handled internally)
-            
+
         """
         # Skip lines with any forbidden characters
-        if not re.match(r'^[\w\s:.,+-]*$', line):
-            return f"Ignored malformed line (bad characters): {line}"
+        if not re.match(r"^[\w\s:.,+-]*$", line):
+            print(f"Ignored malformed line (bad characters): {line}")
+            self.window.statusBox.append(
+                f"Ignored malformed line (bad characters): {line}"
+            )
+            return None
 
-
-        fields = line.split(':')
+        fields = line.split(":")
         if len(fields) < 7:
-            return f"Not enough fields, RAW: {line}"
+            print(f"Not enough fields, RAW: {line}")
+            self.window.statusBox.append(f"Not enough fields, RAW: {line}")
+            return None
 
         try:
             identifier_one = fields[0].strip()
@@ -144,12 +156,16 @@ class LoraReader(threading.Thread):
                 last_complete=last_complete,
                 identifier_two=identifier_two,
             )
-            
+
         except (ValueError, IndexError) as e:
-            return f"Parsing error: {e} | RAW: {line}"
+
+            print(f"Parsing error: {e} | RAW: {line}")
+            self.window.statusBox.append(f"Parsing error: RAW: {line}")
+            return None
         except Exception as e:
             print(f"Error parsing LoraData: {e}")
-
+            self.window.statusBox.append(f"Error parsing LoraData: {e}")
+            return None
 
     @staticmethod
     def convert_to_decimal_degrees(coordinate_string: str) -> float:
@@ -162,18 +178,18 @@ class LoraReader(threading.Thread):
         Args:
             coordinate_string: Coordinate with optional direction suffix
                               (e.g., "45.123N", "-122.456", "123.789W")
-            
+
         Returns:
             Coordinate value in decimal degrees (negative for S/W directions)
-            
+
         Raises:
             ValueError: If coordinate_string cannot be converted to float
             IndexError: If coordinate_string is empty or malformed
         """
-        if coordinate_string[-1] in ['N', 'S', 'E', 'W']:
+        if coordinate_string[-1] in ["N", "S", "E", "W"]:
             direction = coordinate_string[-1]
             coordinate = float(coordinate_string[:-1])
-            if direction in ['S', 'W']:
+            if direction in ["S", "W"]:
                 coordinate *= -1
             return coordinate
         else:
