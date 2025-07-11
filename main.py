@@ -49,7 +49,7 @@ class MainWindow(QMainWindow):
         self.ground_station_altitude = None
 
         # self.log_signal.connect(self.display_data)
-# todo: LeRoy: fix issue that makes it so you need to refresh the ports before any can be selected -- Done: Now Test
+        # todo: LeRoy: fix issue that makes it so you need to refresh the ports before any can be selected -- Done: Now Test
         # Fill ComboBox initially
         self.refresh_ports(self.LoRaComboBox, self.lora_port_names)
         self.refresh_ports(self.ArduinoComboBox, self.arduino_port_names)
