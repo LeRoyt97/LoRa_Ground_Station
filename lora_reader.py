@@ -77,11 +77,11 @@ class LoraReader(threading.Thread):
                         self.data = self.parse_lora_data(line)
                         if self.callback:
                             self.callback.emit(line)
+        except serial.SerialException as e:
+            print(f"Error opening Serial Port: {e}")
         except Exception as e:
             if self.callback:
                 self.callback.emit(f"Error in LoRaReader: {e}")
-        except serial.SerialException as e:
-            print(f"Error opening Serial Port: {e}")
         finally:
             if 'serial_connection' in locals() and self.serial_port.is_open:
                 self.serial_port.close()
@@ -149,10 +149,10 @@ class LoraReader(threading.Thread):
                 identifier_two=identifier_two,
             )
             
-        except Exception as e:
-            print(f"Error parsing LoraData: {e}")
         except (ValueError, IndexError) as e:
             return f"Parsing error: {e} | RAW: {line}"
+        except Exception as e:
+            print(f"Error parsing LoraData: {e}")
 
 
     @staticmethod
