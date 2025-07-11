@@ -20,9 +20,11 @@ import matplotlib.pyplot as plt
 
 
 # todo: LeRoy: Reorganize GUI: Make status_box always visible, so returns/feedback can be seen during setup.
+# todo: smarter GS location input (handle both decimal-degrees and degrees-minutes-seconds)
+# todo: save serial monitor data to a .txt file (GUI: file --> save sort of thing)
 # todo: Clean up unused Debug prints. Some don't have "Debug" in them
-# todo: save serial monitor data to a .txt file
 # todo: calculate distance from balloon
+
 class MainWindow(QMainWindow):
     log_signal = pyqtSignal(str)
 
