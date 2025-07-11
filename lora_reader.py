@@ -92,10 +92,6 @@ class LoraReader(threading.Thread):
 
         Sets internal flag to terminate the run() loop. Thread will complete
         current iteration and exit cleanly, closing serial resources.
-
-        Note:
-            Thread-safe method. Does not block - call join() after stop()
-            to wait for complete thread termination.
         """
         self.is_running = False
 

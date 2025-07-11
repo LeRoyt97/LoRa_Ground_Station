@@ -409,7 +409,6 @@ class MainWindow(QMainWindow):
         """Start basic tracking thread without prediction.
         
         Creates and starts worker thread for standard balloon tracking.
-        Disables UI controls during tracking operation. #TODO:tariq is this true?? AI generated so need to confirm
         """
         # sets up the qt thread to start tracking, and starts the thread
         try:
@@ -439,7 +438,6 @@ class MainWindow(QMainWindow):
         """Start tracking thread with predictive capabilities.
         
         Creates and starts worker thread for predictive balloon tracking.
-        Disables UI controls during tracking operation.
         """
         # sets up the qt thread to start tracking with predictions and starts the thread
         self.statusBox.append("Tracking with predictions!")
