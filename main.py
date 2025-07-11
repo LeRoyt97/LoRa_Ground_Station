@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 # todo: Clean up unused Debug prints. Some don't have "Debug" in them
 # todo: calculate distance from balloon
 
+
 class MainWindow(QMainWindow):
     log_signal = pyqtSignal(str)
 
@@ -101,7 +102,7 @@ class MainWindow(QMainWindow):
 
     def refresh_ports(self, combo_box, port_names_list: list, target: str) -> None:
         """Refresh available serial ports in combo box.
-        
+
         Args:
             combo_box: Qt combo box widget to populate with port descriptions
             port_names_list: List to store corresponding port device names
@@ -137,8 +138,7 @@ class MainWindow(QMainWindow):
             self.statusBox.append(f"Refresh ports error: {err}")
 
     def start_lora_reader(self) -> None:
-        """Start LoRa reader thread for receiving telemetry data.
-        """
+        """Start LoRa reader thread for receiving telemetry data."""
         # print("Select button clicked")
         selected_index = self.LoRaComboBox.currentIndex()
 
@@ -160,8 +160,7 @@ class MainWindow(QMainWindow):
             self.log_signal.emit("No valid LoRa port selected")
 
     def start_arduino(self) -> None:
-        """Initialize and connect to Arduino ground station controller.
-        """
+        """Initialize and connect to Arduino ground station controller."""
         # checks if arduino is selected, and if the connection is not already made, instantiates an instance of
         # the GroundStationArduino class
         # if an arduino is connected, or one is not selected, the function returns
@@ -190,8 +189,7 @@ class MainWindow(QMainWindow):
         return
 
     def tilt_up(self) -> None:
-        """Tilt ground station antenna upward by configured degrees.
-        """
+        """Tilt ground station antenna upward by configured degrees."""
         # if an arduino is connected, uses ground_station_arduino to adjust the tilt up
         if self.is_arduino_connected:
             self.ground_station_arduino.adjust_tilt_up(
@@ -209,8 +207,7 @@ class MainWindow(QMainWindow):
         return
 
     def tilt_down(self) -> None:
-        """Tilt ground station antenna downward by configured degrees.
-        """
+        """Tilt ground station antenna downward by configured degrees."""
         # if an arduino is connected, uses ground_station_arduino to adjust the tilt down
         if self.is_arduino_connected:
             self.ground_station_arduino.adjust_tilt_down(
@@ -228,8 +225,7 @@ class MainWindow(QMainWindow):
         return
 
     def pan_counter_clockwise(self) -> None:
-        """Pan ground station antenna counter-clockwise by configured degrees.
-        """
+        """Pan ground station antenna counter-clockwise by configured degrees."""
         # if an arduino is connected, uses ground_station_arduino to adjust the pan counter-clockwise
         if self.is_arduino_connected:
             self.ground_station_arduino.adjust_pan_negative(
@@ -247,8 +243,7 @@ class MainWindow(QMainWindow):
         return
 
     def pan_clockwise(self) -> None:
-        """Pan ground station antenna clockwise by configured degrees.
-        """
+        """Pan ground station antenna clockwise by configured degrees."""
         # if an arduino is connected, uses ground_station_arduino to adjust the pan clockwise
         if self.is_arduino_connected:
             self.ground_station_arduino.adjust_pan_positive(
@@ -265,20 +260,19 @@ class MainWindow(QMainWindow):
 
     def display_data(self, data: str) -> None:
         """Display received data in status box.
-        
+
         Args:
             data: Data string to display in the status box
-            
+
         Note:
             Called from LoRa reader thread via signal for thread-safe operation
         """
         # Called from LoraReader thread - must use signal-safe method
         self.statusBox.append(data)
 
-
     def set_ground_station_location(self) -> None:
         """Set ground station GPS coordinates from user input.
-        
+
         Raises:
             ValueError: If input values cannot be converted to float
         """
@@ -313,7 +307,7 @@ class MainWindow(QMainWindow):
 
     def get_starting_position(self) -> None:
         """Calculate sun position for ground station calibration.
-        
+
         Uses current UTC time and ground station location to determine
         sun's azimuth and elevation for antenna pointing reference.
         Populates starting position text boxes with calculated values.
@@ -352,7 +346,7 @@ class MainWindow(QMainWindow):
 
     def calibrate(self) -> None:
         """Calibrate ground station with starting azimuth and elevation values.
-        
+
         Raises:
             ValueError: If position values cannot be converted to float
         """
@@ -387,8 +381,7 @@ class MainWindow(QMainWindow):
         return
 
     def return_to_sun(self):
-        """Point ground station back to current sun position.
-        """
+        """Point ground station back to current sun position."""
         if (
             self.is_arduino_connected
             and self.is_ground_station_location_set
@@ -422,8 +415,7 @@ class MainWindow(QMainWindow):
         return
 
     def set_predict_track(self) -> None:
-        """Enable predictive tracking mode and check system readiness.
-        """
+        """Enable predictive tracking mode and check system readiness."""
         # sets the predict track bool variable
         # then calls the check_if_ready function to ensure all conditions to track have been met
         self.is_predicting_track = True
@@ -432,7 +424,7 @@ class MainWindow(QMainWindow):
 
     def check_if_ready(self) -> bool:
         """Verify all systems are ready for tracking operation.
-        
+
         Returns:
             True if ready to track and tracking started, False otherwise
         """
@@ -489,7 +481,7 @@ class MainWindow(QMainWindow):
 
     def call_track(self) -> None:
         """Start basic tracking thread without prediction.
-        
+
         Creates and starts worker thread for standard balloon tracking.
         """
         # sets up the qt thread to start tracking, and starts the thread
@@ -521,7 +513,7 @@ class MainWindow(QMainWindow):
 
     def call_predict_track(self) -> None:
         """Start tracking thread with predictive capabilities.
-        
+
         Creates and starts worker thread for predictive balloon tracking.
         """
         # sets up the qt thread to start tracking with predictions and starts the thread
@@ -550,8 +542,7 @@ class MainWindow(QMainWindow):
         self.track_thread.start()
 
     def stop_tracking(self) -> None:
-        """Stop current tracking operation and reset UI controls.
-        """
+        """Stop current tracking operation and reset UI controls."""
         # this stops the tracking thread, thus stopping the tracking
         if self.is_tracking:
             self.is_tracking = False
@@ -563,8 +554,7 @@ class MainWindow(QMainWindow):
         return
 
     def emergency_stop(self) -> None:
-        """Execute emergency stop procedure for ground station.
-        """
+        """Execute emergency stop procedure for ground station."""
         if self.is_arduino_connected:
             self.ground_station_arduino.send_emergency_stop()
             self.stop_tracking()
@@ -576,9 +566,11 @@ class MainWindow(QMainWindow):
 
         return
 
-    def display_calculations(self, distance: float, azimuth: float, elevation: float) -> None:
+    def display_calculations(
+        self, distance: float, azimuth: float, elevation: float
+    ) -> None:
         """Display tracking calculations on GUI.
-        
+
         Args:
             distance: Distance to target in meters
             azimuth: Target azimuth in degrees
@@ -592,10 +584,10 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         """Handle application close event and cleanup resources.
-        
+
         Args:
             event: Qt close event object
-            
+
         Note:
             Stops LoRa reader thread if running before accepting close event
         """
@@ -605,8 +597,7 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def clear_serial(self) -> None:
-        """Clear the serial status display box.
-        """
+        """Clear the serial status display box."""
         self.statusBox.clear()
 
 
@@ -617,7 +608,7 @@ class Worker(QObject):
 
     def __init__(self, reader) -> None:
         """Initialize worker thread for tracking operations.
-        
+
         Args:
             reader: LoRa reader instance for telemetry data reception
         """
@@ -627,11 +618,11 @@ class Worker(QObject):
 
     def track(self) -> None:
         """Execute basic tracking algorithm.
-        
+
         Monitors balloon position every 5 seconds and calculates
         required antenna pointing angles for tracking. Sends movement
         commands to ground station when new position data is received.
-        
+
         Note:
             Runs in separate thread to prevent GUI blocking
         """
@@ -700,12 +691,12 @@ class Worker(QObject):
 
     def predict_track(self) -> None:
         """Execute predictive tracking algorithm.
-        
+
         Uses motion prediction to anticipate balloon position and
         maintain tracking during communication gaps. Calculates
         velocity vectors and predicts future positions when no
         new telemetry data is received.
-        
+
         Note:
             Saves tracking data to CSV file for analysis
         """
