@@ -29,63 +29,62 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__()
         loadUi("LoRa_Designer.ui", self)
 
-        # Reader placeholder
+        # === Hardware Interfaces and Threads ===
         self.reader = None
-        self.GroundStationArduino = None
-        self.starting_azimuth = None
-        self.starting_elevation = None
-
-        self.is_arduino_connected = False
-        self.is_ground_station_location_set = False
-        self.is_calibrated = False
-        self.lora_port_names = []
-        self.arduino_port_names = []
-        self.is_lora_listening = False
-        self.is_tracking = False
-        self.is_predicting_track = False
-
-        self.ground_station_arduino = None  # classes will be instantiated later
-
-        self.ports = None
-
-        self.ground_station_latitude = None
-        self.ground_station_longitude = None
-        self.ground_station_altitude = None
+        self.ground_station_arduino = None
         self.track_thread = None
         self.worker = None
 
-        # self.log_signal.connect(self.display_data)
-        # Fill ComboBox initially
+        # === Serial Port Management ===
+        self.ports = None
+        self.lora_port_names = []
+        self.arduino_port_names = []
+
+        # === State Flags ===
+        self.is_arduino_connected = False
+        self.is_calibrated = False
+        self.is_ground_station_location_set = False
+        self.is_lora_listening = False
+        self.is_predicting_track = False
+        self.is_tracking = False
+
+        # === Ground Station Parameters ===
+        self.GroundStationArduino = None
+        self.ground_station_latitude = None
+        self.ground_station_longitude = None
+        self.ground_station_altitude = None
+        self.starting_azimuth = None
+        self.starting_elevation = None
+
+        # === Connect ComboBox Refreshes ===
         self.refresh_ports(self.LoRaComboBox, self.lora_port_names, "lora")
         self.refresh_ports(self.ArduinoComboBox, self.arduino_port_names, "arduino")
 
-        # Connect Serial Port Buttons
+        # === Connect Serial Port Buttons ===
         self.LoRaRefreshButton.clicked.connect(
             lambda: self.refresh_ports(self.LoRaComboBox, self.lora_port_names, "lora")
         )
         self.LoRaSelectButton.clicked.connect(self.start_lora_reader)
         self.ArduinoRefreshButton.clicked.connect(
-            lambda: self.refresh_ports(
-                self.ArduinoComboBox, self.arduino_port_names, "arduino"
-            )
+            lambda: self.refresh_ports(self.ArduinoComboBox, self.arduino_port_names, "arduino")
         )
         self.ArduinoSelectButton.clicked.connect(self.start_arduino)
         self.ClearSerialButton.clicked.connect(self.clear_serial)
 
-        # Connect Adjustment Buttons
+        # === Connect Adjustment Buttons ===
         self.UpButton.clicked.connect(self.tilt_up)
         self.DownButton.clicked.connect(self.tilt_down)
-        self.log_signal.connect(self.display_data)
         self.ClockWiseButton.clicked.connect(self.pan_counter_clockwise)
         self.CounterClockeWiseButton.clicked.connect(self.pan_clockwise)
+        self.log_signal.connect(self.display_data)
 
-        # Connect SetUp Buttons
+        # === Connect SetUp Buttons ===
         self.setGSLocationButton.clicked.connect(self.set_ground_station_location)
         self.calculateStartingPosButton.clicked.connect(self.get_starting_position)
         self.returnToSunButton.clicked.connect(self.return_to_sun)
         self.setStartingPosButton.clicked.connect(self.calibrate)
 
-        # Connect Start and Stop Buttons
+        # === Connect Start and Stop Buttons ===
         self.startButton.clicked.connect(self.check_if_ready)
         self.stopButton.clicked.connect(self.stop_tracking)
         self.EStopButton.clicked.connect(self.emergency_stop)
@@ -129,7 +128,9 @@ class MainWindow(QMainWindow):
             selected_port = self.lora_port_names[selected_index]
             self.statusBox.setPlainText(f"LoRa Connecting to {selected_port}")
             try:
-                self.reader = LoraReader(selected_port, callback=self.log_signal)
+                self.reader = LoraReader(
+                    port=selected_port, window=self, callback=self.log_signal
+                )
                 self.reader.start()
                 self.is_lora_listening = True
             except Exception as err:

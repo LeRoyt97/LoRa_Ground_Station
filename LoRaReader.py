@@ -4,6 +4,7 @@ import serial
 import serial.tools.list_ports
 import threading
 
+
 @dataclasses.dataclass
 class LoraDataObject:
     identifier_one: str
@@ -16,13 +17,13 @@ class LoraDataObject:
 
 
 class LoraReader(threading.Thread):
-    def __init__(self, port, baudrate=115200, callback=None):
+    def __init__(self, port, window, baudrate=115200, callback=None):
         super().__init__()
+        self.window = window
         self.data = None
         self.serial_port = serial.Serial(port=port, baudrate=baudrate, timeout=1)
         self.callback = callback
         self.is_running = True
-
 
     def run(self):
         try:
@@ -30,7 +31,11 @@ class LoraReader(threading.Thread):
                 if self.serial_port.in_waiting > 0:
                     print("Debug: LoRa Run if")
                     # TODO:LeRoy: Check that error handling works
-                    line = self.serial_port.readline().decode('utf-8', errors="replace").strip()
+                    line = (
+                        self.serial_port.readline()
+                        .decode("utf-8", errors="replace")
+                        .strip()
+                    )
                     if line:
                         print(line)
                         self.data = self.parse_lora_data(line)
@@ -42,25 +47,29 @@ class LoraReader(threading.Thread):
         except serial.SerialException as e:
             print(f"Error opening Serial Port: {e}")
         finally:
-            if 'serial_connection' in locals() and self.serial_port.is_open:
+            if "serial_connection" in locals() and self.serial_port.is_open:
                 self.serial_port.close()
                 print("Serial Port closed")
 
     def stop(self):
         self.is_running = False
 
-
     # returns a LoraDataObject after parsing
     def parse_lora_data(self, line):
 
         # Skip lines with any forbidden characters
-        if not re.match(r'^[\w\s:.,+-]*$', line):
-            return f"Ignored malformed line (bad characters): {line}"
+        if not re.match(r"^[\w\s:.,+-]*$", line):
+            print(f"Ignored malformed line (bad characters): {line}")
+            self.window.statusBox.append(
+                f"Ignored malformed line (bad characters): {line}"
+            )
+            return None
 
-
-        fields = line.split(':')
+        fields = line.split(":")
         if len(fields) < 7:
-            return f"Not enough fields, RAW: {line}"
+            print(f"Not enough fields, RAW: {line}")
+            self.window.statusBox.append(f"Not enough fields, RAW: {line}")
+            return None
 
         try:
             identifier_one = fields[0].strip()
@@ -84,20 +93,24 @@ class LoraReader(threading.Thread):
                 last_complete=last_complete,
                 identifier_two=identifier_two,
             )
-            
+
+        except (ValueError, IndexError) as e:
+            print(f"Parsing error: {e} | RAW: {line}")
+            self.window.statusBox.append(f"Parsing error: {e}")
+            return None
+
         except Exception as e:
             print(f"Error parsing LoraData: {e}")
-        except (ValueError, IndexError) as e:
-            return f"Parsing error: {e} | RAW: {line}"
-
+            self.window.statusBox.append(f"Parsing error: {e}")
+            return None
 
     @staticmethod
     def convert_to_decimal_degrees(coordinate_string):
         # Handles both N/S/E/W directions and +/- decimal degree formats and converts str to float
-        if coordinate_string[-1] in ['N', 'S', 'E', 'W']:
+        if coordinate_string[-1] in ["N", "S", "E", "W"]:
             direction = coordinate_string[-1]
             coordinate = float(coordinate_string[:-1])
-            if direction in ['S', 'W']:
+            if direction in ["S", "W"]:
                 coordinate *= -1
             return coordinate
         else:
