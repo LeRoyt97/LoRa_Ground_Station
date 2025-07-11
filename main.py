@@ -7,6 +7,7 @@ from PyQt5.uic import loadUi
 import sys
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QObject, QThread
 import serial
+import serial.tools.list_ports
 import time
 from ground_station_arduino import GroundStationArduino
 from satellite_tracking_math import TrackingMath
