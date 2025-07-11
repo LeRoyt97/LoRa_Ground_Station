@@ -1,7 +1,6 @@
 import dataclasses
 import re
 import serial
-import serial.tools.list_ports
 import threading
 
 @dataclasses.dataclass

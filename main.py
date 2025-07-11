@@ -1,21 +1,21 @@
 import os
 from _pyrepl import reader
 
-from LoRaReader import LoraReader, LoraDataObject
+from lora_reader import LoraReader, LoraDataObject
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.uic import loadUi
 import sys
 from PyQt5.QtCore import pyqtSlot, pyqtSignal, QObject, QThread
-import serial.tools.list_ports
+import serial
 import time
-from Ground_Station_Arduino import GroundStationArduino
-from satelliteTrackingMath import TrackingMath
-from sunposition import sunpos
+from ground_station_arduino import GroundStationArduino
+from satellite_tracking_math import TrackingMath
+from sun_position import sunpos
 import datetime
 import csv
 import statistics
 import numpy as np
-from pylab import *
+import matplotlib.pyplot as plt
 
 # todo: LeRoy: Reorganize GUI: Make status_box always visible, so returns/feedback can be seen during setup.
 #todo: Clean up unused Debug prints. Some don't have "Debug" in them
