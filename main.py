@@ -55,13 +55,13 @@ class MainWindow(QMainWindow):
         # self.log_signal.connect(self.display_data)
         # todo: LeRoy: fix issue that makes it so you need to refresh the ports before any can be selected -- Done: Now Test
         # Fill ComboBox initially
-        self.refresh_ports(self.LoRaComboBox, self.lora_port_names)
-        self.refresh_ports(self.ArduinoComboBox, self.arduino_port_names)
+        self.refresh_ports(self.LoRaComboBox, self.lora_port_names, "lora")
+        self.refresh_ports(self.ArduinoComboBox, self.arduino_port_names, "arduino")
 
         # Connect Serial Port Buttons
-        self.LoRaRefreshButton.clicked.connect(lambda: self.refresh_ports(self.LoRaComboBox, self.lora_port_names))
+        self.LoRaRefreshButton.clicked.connect(lambda: self.refresh_ports(self.LoRaComboBox, self.lora_port_names, "lora"))
         self.LoRaSelectButton.clicked.connect(self.start_lora_reader)
-        self.ArduinoRefreshButton.clicked.connect(lambda: self.refresh_ports(self.ArduinoComboBox, self.arduino_port_names))
+        self.ArduinoRefreshButton.clicked.connect(lambda: self.refresh_ports(self.ArduinoComboBox, self.arduino_port_names, "arduino"))
         self.ArduinoSelectButton.clicked.connect(self.start_arduino)
         self.ClearSerialButton.clicked.connect(self.clear_serial)
 
@@ -85,14 +85,32 @@ class MainWindow(QMainWindow):
         self.predictionStartButton.clicked.connect(self.set_predict_track)
 
 
-    def refresh_ports(self, combo_box, port_names_list: list) -> None:
+    def refresh_ports(self, combo_box, port_names_list: list, target: str) -> None:
         """Refresh available serial ports in combo box.
         
         Args:
             combo_box: Qt combo box widget to populate with port descriptions
             port_names_list: List to store corresponding port device names
+            target: Either "arduino" or "lora"
         """
         try:
+            if target == "lora" and self.reader:
+                self.is_lora_listening = False
+                self.reader.stop()
+                self.reader.join()
+                if self.reader.serial_port.is_open:
+                    self.reader.serial_port.close()
+                self.reader = None
+
+            elif (
+                    target == "arduino"
+                    and self.GroundStationArduino
+                    and self.GroundStationArduino.com_port.is_open
+            ):
+                self.GroundStationArduino.com_port.close()
+                self.GroundStationArduino = None
+                self.is_arduino_connected = False
+
             combo_box.clear()
             port_names_list.clear()
             ports = serial.tools.list_ports.comports()
@@ -264,7 +282,7 @@ class MainWindow(QMainWindow):
         """
         # this makes a call to sunposition to calculate the azimuth and elevation of the sun at the current location
         # of the ground station
-        # it populates the starting aziumth and elevation boxes
+        # it populates the starting azimuth and elevation boxes
         try:
             if self.is_ground_station_location_set:
                 now = datetime.datetime.now(tz=datetime.timezone.utc)
@@ -655,7 +673,7 @@ class Worker(QObject):
                     # keep average of azimuth/elevations
                     # if new calculation is outlier, throw it out, don't go to new spot
                     # reset average between pings
-                    # alternatively, implement some type of filter (savitzky golay, kalman, etc)
+                    # alternatively, implement some type of filter (savitzky golay, kalman, etc.)
 
                     """
                     if new_elevation > np.mean(elevation_list) + (2 * np.std(elevation_list)) or new_elevation < np.mean(elevation_list) - (2 * np.std(elevation_list)) \
