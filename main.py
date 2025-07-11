@@ -106,6 +106,7 @@ class MainWindow(QMainWindow):
         """
         try:
             if target == "lora" and self.reader:
+                self.is_lora_listening = False
                 self.reader.stop()
                 self.reader.join()
                 if self.reader.serial_port.is_open:
@@ -124,6 +125,7 @@ class MainWindow(QMainWindow):
             combo_box.clear()
             port_names_list.clear()
             ports = serial.tools.list_ports.comports()
+
             for port_info in sorted(ports, key=lambda p: p.device):
                 combo_box.addItem(port_info.description)
                 port_names_list.append(port_info.device)
