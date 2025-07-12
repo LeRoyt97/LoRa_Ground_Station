@@ -270,6 +270,12 @@ class MainWindow(QMainWindow):
         # Called from LoraReader thread - must use signal-safe method
         self.statusBox.append(data)
 
+    def is_dg_gps(lat_str: str, long_str: str, alt_str: str) -> bool:
+        return False
+
+    def convert_dms_to_dg(lat_str: str, long_str: str, alt: str) -> None:
+        return
+
     def set_ground_station_location(self) -> None:
         """Set ground station GPS coordinates from user input.
 
@@ -281,19 +287,23 @@ class MainWindow(QMainWindow):
         try:
             if self.is_arduino_connected:
                 latitude_string = self.GSLatBox.text().strip()
+                longitude_string = self.GSLongBox.text().strip()
+                altitude_string = self.GSAltBox.text().strip()
+                if not is_dg_gps(latitude_string, longitude_string, altitude_string):
+                    convert_dms_to_dg(latitude_string, longitude_string, altitude_string)
+
                 self.ground_station_latitude = float(latitude_string)
                 print(self.ground_station_latitude)
 
-                longitude_string = self.GSLongBox.text().strip()
                 self.ground_station_longitude = float(longitude_string)
                 print(self.ground_station_longitude)
 
-                altitude_string = self.GSAltBox.text().strip()
                 self.ground_station_altitude = float(altitude_string)
                 print(self.ground_station_altitude)
 
                 self.statusBox.append("Ground station location entered successfully!")
                 self.is_ground_station_location_set = True
+
             else:
                 self.statusBox.append("Please connect arduino")
                 self.is_ground_station_location_set = False
