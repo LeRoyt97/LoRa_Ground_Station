@@ -1,4 +1,5 @@
 import os
+import re
 from _pyrepl import reader
 
 from lora_reader import LoraReader, LoraDataObject
@@ -270,11 +271,77 @@ class MainWindow(QMainWindow):
         # Called from LoraReader thread - must use signal-safe method
         self.statusBox.append(data)
 
-    def is_dg_gps(lat_str: str, long_str: str, alt_str: str) -> bool:
-        return False
+    @staticmethod
+    def is_dms_gps(lat_str: str, long_str: str) -> bool:
+        """Check if the latitude or longitude strings are in Degree Minute Seconds format
+        Will match against:
 
-    def convert_dms_to_dg(lat_str: str, long_str: str, alt: str) -> None:
-        return
+        optional negative sign 
+        + 1-3 digits 
+        + degree symbol or space 
+        + 1-2 digits 
+        + apostraphe or space
+        + seconds with optional decimal
+        + optional quotes or spaces
+        + optional direction
+        """
+        
+        dms_regex = re.compile(
+            r"""^              # start of string
+            -?                 # optional minus sign
+            \d{1,3}            # degrees (1 to 3 digits)
+            [°\s]              # degree symbol or space
+            \s*                # optional whitespace
+            \d{1,2}            # minutes (1 to 2 digits)
+            ['\s]              # apostrophe or space
+            \s*                # optional whitespace
+            \d{1,2}(?:\.\d+)?  # seconds with optional decimal
+            ["”\s]?            # optional quote, double-quote, or space
+            \s*                # optional whitespace
+            [NSEW]?            # optional direction
+            $                  # end of string
+            """,
+            re.VERBOSE | re.IGNORECASE
+        )
+
+        for str in (lat_str, long_str):
+            if not dms_regex.fullmatch(str): # fullmatch to protect against prefix/postfix garbage
+                return False
+        return True
+
+    def convert_dms_to_dg(self, dms_string: str) -> str | None:
+        """Converts a Degree Minute Second String matching shape of is_dms_gps,
+        To a decimal degree GPS formatted string
+
+        Raises:
+            ValueError: If input DMS string doesn't have 3 numbers
+        """
+        try:
+            numbers = re.findall(
+                    r"""
+                    \d+         # match one or more digit
+                    (?:\.\d+)?  # match optionally against a . or a digit one or more times
+                    """, dms_string.strip()
+            )
+            direction = re.search(r"[NSEW", dms_string.strip().upper())
+
+            if len(numbers) < 2 or len(numbers) > 3:
+                raise ValueError("DMS string needs atleast degrees and minutes, but not more than three.")
+
+            degrees = float(numbers[0])
+            minutes = float(numbers[1])
+            seconds = float(numbers[2] if len(numbers) < 2 else 0.0)
+
+            dg = degrees + minutes / 60 + seconds / 3600
+
+            if direction and direction.group() in ("S", "W"):
+                dg = -dg
+
+            return str(dg)
+
+        except ValueError as err:
+            self.statusBox.append(f"Conversion failed: {err}")
+            return None
 
     def set_ground_station_location(self) -> None:
         """Set ground station GPS coordinates from user input.
@@ -289,8 +356,10 @@ class MainWindow(QMainWindow):
                 latitude_string = self.GSLatBox.text().strip()
                 longitude_string = self.GSLongBox.text().strip()
                 altitude_string = self.GSAltBox.text().strip()
-                if not is_dg_gps(latitude_string, longitude_string, altitude_string):
-                    convert_dms_to_dg(latitude_string, longitude_string, altitude_string)
+
+                if self.is_dms_gps(latitude_string, longitude_string):
+                    for coord_str in (latitude_string, longitude_string):
+                        coord_str = self.convert_dms_to_dg(coord_str)
 
                 self.ground_station_latitude = float(latitude_string)
                 print(self.ground_station_latitude)
