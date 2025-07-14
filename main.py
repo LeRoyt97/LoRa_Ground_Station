@@ -1,7 +1,6 @@
 import os
 import re
 from _pyrepl import reader
-
 from lora_reader import LoraReader, LoraDataObject
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.uic import loadUi
@@ -19,11 +18,8 @@ import statistics
 import numpy as np
 import matplotlib.pyplot as plt
 
-
-# todo: LeRoy: Reorganize GUI: Make status_box always visible, so returns/feedback can be seen during setup.
-# todo: smarter GS location input (handle both decimal-degrees and degrees-minutes-seconds)
-# todo: save serial monitor data to a .txt file (GUI: file --> save sort of thing)
-# todo: Clean up unused Debug prints. Some don't have "Debug" in them
+# todo: GUI instructions for entering GS location info
+# todo: save serial monitor data to a .txt or .csv file (GUI: file --> save sort of thing)
 # todo: calculate distance from balloon
 
 
@@ -277,7 +273,7 @@ class MainWindow(QMainWindow):
         + 1-3 digits
         + degree symbol or space
         + 1-2 digits
-        + apostraphe or space
+        + apostrophe or space
         + seconds with optional decimal
         + optional quotes or spaces
         + optional direction
@@ -304,7 +300,7 @@ class MainWindow(QMainWindow):
         for str in (lat_str, long_str):
             if not dms_regex.fullmatch(
                 str
-            ):  # fullmatch to protect against prefix/postfix garbage
+            ):  # re.fullmatch to protect against prefix/postfix garbage
                 return False
         return True
 
@@ -316,7 +312,6 @@ class MainWindow(QMainWindow):
             ValueError: If input DMS string doesn't have 3 numbers
         """
         try:
-            print(f"Debug: dms_string: {dms_string}")
             numbers = re.findall(
                 r"""
                     \d+         # match one or more digit
@@ -325,7 +320,7 @@ class MainWindow(QMainWindow):
                 dms_string.strip(),
                 re.VERBOSE,
             )
-            print(f"Debug: numbers: {numbers}")
+
             direction = re.search(r"[NSEW]", dms_string.strip().upper())
 
             if len(numbers) < 2 or len(numbers) > 3:

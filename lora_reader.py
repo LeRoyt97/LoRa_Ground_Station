@@ -74,7 +74,6 @@ class LoraReader(threading.Thread):
         try:
             while self.is_running:
                 if self.serial_port.in_waiting > 0:
-                    print("Debug: LoRa Run if")
                     line = (
                         self.serial_port.readline()
                         .decode("utf-8", errors="replace")
