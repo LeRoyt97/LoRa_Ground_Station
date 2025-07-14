@@ -311,7 +311,7 @@ class MainWindow(QMainWindow):
                 return False
         return True
 
-    def convert_dms_to_dg(self, dms_string: str) -> str | None:
+    def convert_dms_to_dg(self, dms_string: str) -> float | None:
         """Converts a Degree Minute Second String matching shape of is_dms_gps,
         To a decimal degree GPS formatted string
 
@@ -319,7 +319,7 @@ class MainWindow(QMainWindow):
             ValueError: If input DMS string doesn't have 3 numbers
         """
         try:
-            print(dms_string)
+            print(f"Debug: dms_string: {dms_string}")
             numbers = re.findall(
                 r"""
                     \d+         # match one or more digit
@@ -328,24 +328,24 @@ class MainWindow(QMainWindow):
                 dms_string.strip(),
                 re.VERBOSE,
             )
-            print(numbers)
+            print(f"Debug: numbers: {numbers}")
             direction = re.search(r"[NSEW]", dms_string.strip().upper())
 
             if len(numbers) < 2 or len(numbers) > 3:
                 raise ValueError(
-                    "DMS string needs atleast degrees and minutes, but not more than three."
+                    "DMS string needs at least degrees and minutes, but not more than three."
                 )
 
             degrees = float(numbers[0])
             minutes = float(numbers[1])
             seconds = float(numbers[2] if len(numbers) < 2 else 0.0)
 
-            dg = degrees + minutes / 60 + seconds / 3600
+            decimal_degrees = degrees + minutes / 60 + seconds / 3600
 
             if direction and direction.group() in ("S", "W"):
-                dg = -dg
+                decimal_degrees = -decimal_degrees
 
-            return str(dg)
+            return decimal_degrees
 
         except ValueError as err:
             self.statusBox.append(f"Conversion failed: {err}")
@@ -366,15 +366,12 @@ class MainWindow(QMainWindow):
                 altitude_string = self.GSAltBox.text().strip()
 
                 if self.is_dms_gps(latitude_string, longitude_string):
-                    latitude_string, longitude_string = (
+                    self.ground_station_latitude, self.ground_station_longitude = (
                         self.convert_dms_to_dg(latitude_string),
                         self.convert_dms_to_dg(longitude_string),
                     )
 
-                self.ground_station_latitude = float(latitude_string)
                 print(self.ground_station_latitude)
-
-                self.ground_station_longitude = float(longitude_string)
                 print(self.ground_station_longitude)
 
                 self.ground_station_altitude = float(altitude_string)
