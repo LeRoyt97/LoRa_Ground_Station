@@ -318,10 +318,12 @@ class MainWindow(QMainWindow):
         """
         try:
             numbers = re.findall(
-                    r"""
+                r"""
                     \d+         # match one or more digit
                     (?:\.\d+)?  # match optionally against a . or a digit one or more times
-                    """, dms_string.strip()
+                """, 
+                dms_string.strip(),
+                re.VERBOSE
             )
             direction = re.search(r"[NSEW]", dms_string.strip().upper())
 
