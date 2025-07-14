@@ -175,17 +175,14 @@ class MainWindow(QMainWindow):
                 selected_port = self.arduino_port_names[selected_index]
                 self.ground_station_arduino = GroundStationArduino(selected_port, 9600)
                 print("After ground_station_arduino init", self.ground_station_arduino)
-                self.AdjustmentLogBox.append("Connected to {selected_port}!")
                 self.statusBox.append(f"Connected to {selected_port}!")
                 self.is_arduino_connected = True
             except Exception as err:
                 self.statusBox.append(f"Failed to connect Arduino: {err}")
         elif self.is_arduino_connected:
-            self.AdjustmentLogBox.setPlainText("Arduino already connected")
             self.statusBox.append("Arduino already connected")
         else:
             self.statusBox.append("Unable to connect to Arduino")
-            self.AdjustmentLogBox.setPlainText("Unable to connect to Arduino")
         return
 
     def tilt_up(self) -> None:
@@ -195,14 +192,14 @@ class MainWindow(QMainWindow):
             self.ground_station_arduino.adjust_tilt_up(
                 self.degreesPerClickBox.currentText()
             )
-            self.AdjustmentLogBox.setPlainText(
+            self.statusBox.setPlainText(
                 "adjusting tilt up "
                 + self.degreesPerClickBox.currentText()
                 + " degrees"
             )
         else:
             print("Unable to connect to ground station motors")
-            self.AdjustmentLogBox.setPlainText("Not connected to ground station motors")
+            self.statusBox.setPlainText("Not connected to ground station motors")
 
         return
 
@@ -213,14 +210,14 @@ class MainWindow(QMainWindow):
             self.ground_station_arduino.adjust_tilt_down(
                 self.degreesPerClickBox.currentText()
             )
-            self.AdjustmentLogBox.setPlainText(
+            self.statusBox.setPlainText(
                 "adjusting tilt down "
                 + self.degreesPerClickBox.currentText()
                 + " degrees"
             )
         else:
             print("Unable to connect to ground station motors")
-            self.AdjustmentLogBox.setPlainText("Not connected to ground station motors")
+            self.statusBox.setPlainText("Not connected to ground station motors")
 
         return
 
@@ -231,14 +228,14 @@ class MainWindow(QMainWindow):
             self.ground_station_arduino.adjust_pan_negative(
                 self.degreesPerClickBox.currentText()
             )
-            self.AdjustmentLogBox.setPlainText(
+            self.statusBox.setPlainText(
                 "adjusting pan "
                 + self.degreesPerClickBox.currentText()
                 + " Counter Clockwise"
             )
         else:
             print("Unable to connect to ground station motors")
-            self.AdjustmentLogBox.setPlainText("Not connected to ground station motors")
+            self.statusBox.setPlainText("Not connected to ground station motors")
 
         return
 
@@ -249,12 +246,12 @@ class MainWindow(QMainWindow):
             self.ground_station_arduino.adjust_pan_positive(
                 self.degreesPerClickBox.currentText()
             )
-            self.AdjustmentLogBox.setPlainText(
+            self.statusBox.setPlainText(
                 "adjusting pan " + self.degreesPerClickBox.currentText() + " Clockwise"
             )
         else:
             print("Unable to connect to ground station motors")
-            self.AdjustmentLogBox.setPlainText("Not connected to ground station motors")
+            self.statusBox.setPlainText("Not connected to ground station motors")
 
         return
 
