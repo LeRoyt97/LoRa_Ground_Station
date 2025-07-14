@@ -323,7 +323,7 @@ class MainWindow(QMainWindow):
                     (?:\.\d+)?  # match optionally against a . or a digit one or more times
                     """, dms_string.strip()
             )
-            direction = re.search(r"[NSEW", dms_string.strip().upper())
+            direction = re.search(r"[NSEW]", dms_string.strip().upper())
 
             if len(numbers) < 2 or len(numbers) > 3:
                 raise ValueError("DMS string needs atleast degrees and minutes, but not more than three.")
