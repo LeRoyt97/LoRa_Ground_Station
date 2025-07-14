@@ -276,16 +276,16 @@ class MainWindow(QMainWindow):
         """Check if the latitude or longitude strings are in Degree Minute Seconds format
         Will match against:
 
-        optional negative sign 
-        + 1-3 digits 
-        + degree symbol or space 
-        + 1-2 digits 
+        optional negative sign
+        + 1-3 digits
+        + degree symbol or space
+        + 1-2 digits
         + apostraphe or space
         + seconds with optional decimal
         + optional quotes or spaces
         + optional direction
         """
-        
+
         dms_regex = re.compile(
             r"""^              # start of string
             -?                 # optional minus sign
@@ -301,11 +301,13 @@ class MainWindow(QMainWindow):
             [NSEW]?            # optional direction
             $                  # end of string
             """,
-            re.VERBOSE | re.IGNORECASE
+            re.VERBOSE | re.IGNORECASE,
         )
 
         for str in (lat_str, long_str):
-            if not dms_regex.fullmatch(str): # fullmatch to protect against prefix/postfix garbage
+            if not dms_regex.fullmatch(
+                str
+            ):  # fullmatch to protect against prefix/postfix garbage
                 return False
         return True
 
@@ -317,18 +319,22 @@ class MainWindow(QMainWindow):
             ValueError: If input DMS string doesn't have 3 numbers
         """
         try:
+            print(dms_string)
             numbers = re.findall(
                 r"""
                     \d+         # match one or more digit
                     (?:\.\d+)?  # match optionally against a . or a digit one or more times
-                """, 
+                """,
                 dms_string.strip(),
-                re.VERBOSE
+                re.VERBOSE,
             )
+            print(numbers)
             direction = re.search(r"[NSEW]", dms_string.strip().upper())
 
             if len(numbers) < 2 or len(numbers) > 3:
-                raise ValueError("DMS string needs atleast degrees and minutes, but not more than three.")
+                raise ValueError(
+                    "DMS string needs atleast degrees and minutes, but not more than three."
+                )
 
             degrees = float(numbers[0])
             minutes = float(numbers[1])
@@ -360,8 +366,10 @@ class MainWindow(QMainWindow):
                 altitude_string = self.GSAltBox.text().strip()
 
                 if self.is_dms_gps(latitude_string, longitude_string):
-                    for coord_str in (latitude_string, longitude_string):
-                        coord_str = self.convert_dms_to_dg(coord_str)
+                    latitude_string, longitude_string = (
+                        self.convert_dms_to_dg(latitude_string),
+                        self.convert_dms_to_dg(longitude_string),
+                    )
 
                 self.ground_station_latitude = float(latitude_string)
                 print(self.ground_station_latitude)
