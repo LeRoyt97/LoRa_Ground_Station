@@ -297,9 +297,9 @@ class MainWindow(QMainWindow):
             re.VERBOSE | re.IGNORECASE,
         )
 
-        for str in (lat_str, long_str):
+        for coord_str in (lat_str, long_str):
             if not dms_regex.fullmatch(
-                str
+                coord_str
             ):  # re.fullmatch to protect against prefix/postfix garbage
                 return False
         return True
