@@ -18,7 +18,8 @@ import statistics
 import numpy as np
 import matplotlib.pyplot as plt
 
-# todo: GUI instructions for entering GS location info
+# todo: Set up Balloon Command functionality
+# todo: Map stuff
 # todo: save serial monitor data to a .txt or .csv file (GUI: file --> save sort of thing)
 # todo: calculate distance from balloon
 
@@ -362,12 +363,15 @@ class MainWindow(QMainWindow):
                         self.convert_dms_to_dg(latitude_string),
                         self.convert_dms_to_dg(longitude_string),
                     )
+                else:
+                    self.ground_station_latitude = float(latitude_string)
+                    self.ground_station_longitude = float(longitude_string)
 
-                print(self.ground_station_latitude)
-                print(self.ground_station_longitude)
+                print(f"GS Lat: {self.ground_station_latitude}")
+                print(f"GS Lon: {self.ground_station_longitude}")
 
                 self.ground_station_altitude = float(altitude_string)
-                print(self.ground_station_altitude)
+                print(f"GS Alt: {self.ground_station_altitude}")
 
                 self.statusBox.append("Ground station location entered successfully!")
                 self.is_ground_station_location_set = True
@@ -433,13 +437,13 @@ class MainWindow(QMainWindow):
             try:
                 starting_azimuth_string = self.startingAzimuthBox.toPlainText().strip()
                 starting_azimuth = float(starting_azimuth_string)
-                print(starting_azimuth)
+                print(f"Starting Azimuth: {starting_azimuth}")
 
                 starting_elevation_string = (
                     self.startingElevationBox.toPlainText().strip()
                 )
                 starting_elevation = float(starting_elevation_string)
-                print(starting_elevation)
+                print(f"Starting Elevation {starting_elevation}")
 
                 self.ground_station_arduino.calibrate(
                     starting_azimuth, starting_elevation
@@ -655,9 +659,9 @@ class MainWindow(QMainWindow):
             elevation: Target elevation in degrees
         """
         # this displays the outputs from the tracking threads on the GUI
-        self.distanceDisplay.setPlainText(str(distance))
-        self.azimuthDisplay.setPlainText(str(azimuth))
-        self.elevationDisplay.setPlainText(str(elevation))
+        self.distanceDisplay.toPlainText(str(distance))
+        self.azimuthDisplay.toPlainText(str(azimuth))
+        self.elevationDisplay.toPlainText(str(elevation))
         return
 
     def closeEvent(self, event) -> None:
