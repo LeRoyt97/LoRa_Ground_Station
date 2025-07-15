@@ -53,6 +53,7 @@ class LoraReader(threading.Thread):
             Thread-safe initialization. Serial port is opened immediately.
             Call start() to begin reading data in separate thread.
         """
+
         super().__init__()
         self.window = window
         self.data = None
@@ -71,6 +72,7 @@ class LoraReader(threading.Thread):
             serial.SerialException: On serial port communication errors
             UnicodeDecodeError: On malformed UTF-8 data (handled gracefully)
         """
+
         try:
             while self.is_running:
                 if self.serial_port.in_waiting > 0:
@@ -100,12 +102,13 @@ class LoraReader(threading.Thread):
         Sets internal flag to terminate the run() loop. Thread will complete
         current iteration and exit cleanly, closing serial resources.
         """
+
         self.is_running = False
 
     def parse_lora_data(self, line: str):
-        """Parse raw LoRa data string into structured telemetry object.
+        """Parse raw LoRa data string into structured object.
 
-        Validates and converts colon-separated telemetry data into LoraDataObject.
+        Validates and converts colon-separated data into LoraDataObject.
         Expected format: identifier:lat:lon:alt:last_sent:last_complete:identifier
 
         Args:
@@ -119,6 +122,7 @@ class LoraReader(threading.Thread):
             IndexError: On insufficient field count (handled internally)
 
         """
+
         # Skip lines with any forbidden characters
         if not re.match(r"^[\w\s:.,+-]*$", line):
             print(f"Ignored malformed line (bad characters): {line}")
@@ -185,6 +189,7 @@ class LoraReader(threading.Thread):
             ValueError: If coordinate_string cannot be converted to float
             IndexError: If coordinate_string is empty or malformed
         """
+
         if coordinate_string[-1] in ["N", "S", "E", "W"]:
             direction = coordinate_string[-1]
             coordinate = float(coordinate_string[:-1])
