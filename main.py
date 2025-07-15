@@ -19,8 +19,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # todo: Set up Balloon Command functionality
+
 # todo: Map stuff
+
 # todo: save serial monitor data to a .txt or .csv file (GUI: file --> save sort of thing)
+# todo:tariq starting branch for this now, use todo:[NAME] to help filter for your todos
+# todo:tariq going to implement the backend, and let you build the gui and plug it into
+# todo:tariq a button or a drop-down, however you want to implement it.
+
 # todo: calculate distance from balloon
 
 
@@ -32,6 +38,7 @@ class MainWindow(QMainWindow):
         port selection combo boxes, and connects all button signals to
         their respective handler methods.
         """
+
         super(MainWindow, self).__init__()
         loadUi("LoRa_Designer.ui", self)
 
@@ -106,6 +113,7 @@ class MainWindow(QMainWindow):
             port_names_list: List to store corresponding port device names
             target: "arduino" or "lora"
         """
+
         try:
             if target == "lora" and self.reader:
                 self.is_lora_listening = False
@@ -137,6 +145,7 @@ class MainWindow(QMainWindow):
 
     def start_lora_reader(self) -> None:
         """Start LoRa reader thread for receiving telemetry data."""
+
         # print("Select button clicked")
         selected_index = self.LoRaComboBox.currentIndex()
 
@@ -185,6 +194,7 @@ class MainWindow(QMainWindow):
 
     def tilt_up(self) -> None:
         """Tilt ground station antenna upward by configured degrees."""
+
         # if an arduino is connected, uses ground_station_arduino to adjust the tilt up
         if self.is_arduino_connected:
             self.ground_station_arduino.adjust_tilt_up(
@@ -203,6 +213,7 @@ class MainWindow(QMainWindow):
 
     def tilt_down(self) -> None:
         """Tilt ground station antenna downward by configured degrees."""
+
         # if an arduino is connected, uses ground_station_arduino to adjust the tilt down
         if self.is_arduino_connected:
             self.ground_station_arduino.adjust_tilt_down(
@@ -221,6 +232,7 @@ class MainWindow(QMainWindow):
 
     def pan_counter_clockwise(self) -> None:
         """Pan ground station antenna counter-clockwise by configured degrees."""
+
         # if an arduino is connected, uses ground_station_arduino to adjust the pan counter-clockwise
         if self.is_arduino_connected:
             self.ground_station_arduino.adjust_pan_negative(
@@ -239,6 +251,7 @@ class MainWindow(QMainWindow):
 
     def pan_clockwise(self) -> None:
         """Pan ground station antenna clockwise by configured degrees."""
+
         # if an arduino is connected, uses ground_station_arduino to adjust the pan clockwise
         if self.is_arduino_connected:
             self.ground_station_arduino.adjust_pan_positive(
@@ -262,6 +275,7 @@ class MainWindow(QMainWindow):
         Note:
             Called from LoRa reader thread via signal for thread-safe operation
         """
+
         # Called from LoraReader thread - must use signal-safe method
         self.statusBox.append(data)
 
@@ -299,19 +313,19 @@ class MainWindow(QMainWindow):
         )
 
         for coord_str in (lat_str, long_str):
-            if not dms_regex.fullmatch(
-                coord_str
-            ):  # re.fullmatch to protect against prefix/postfix garbage
+            if not dms_regex.fullmatch( # re.fullmatch to protect against prefix/postfix garbage
+                coord_str 
+            ):                  
                 return False
         return True
 
     def convert_dms_to_dg(self, dms_string: str) -> float | None:
-        """Converts a Degree Minute Second String matching shape of is_dms_gps,
-        To a decimal degree GPS formatted string
+        """Converts a Degree Minute Second String matching shape of is_dms_gps, To a float.
 
         Raises:
             ValueError: If input DMS string doesn't have 3 numbers
         """
+
         try:
             numbers = re.findall(
                 r"""
