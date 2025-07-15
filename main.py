@@ -1,22 +1,22 @@
-import os
-import re
-from _pyrepl import reader
-from lora_reader import LoraReader, LoraDataObject
+from PyQt5.QtCore import pyqtSlot, pyqtSignal, QObject, QThread
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.uic import loadUi
-import sys
-from PyQt5.QtCore import pyqtSlot, pyqtSignal, QObject, QThread
-import serial
-import serial.tools.list_ports
-import time
+from _pyrepl import reader
 from ground_station_arduino import GroundStationArduino
+from lora_reader import LoraReader, LoraDataObject
 from satellite_tracking_math import TrackingMath
 from sun_position import sunpos
-import datetime
 import csv
-import statistics
-import numpy as np
+import datetime
 import matplotlib.pyplot as plt
+import numpy as np
+import os
+import re
+import serial
+import serial.tools.list_ports
+import statistics
+import sys
+import time
 
 # todo: Set up Balloon Command functionality
 
@@ -313,9 +313,9 @@ class MainWindow(QMainWindow):
         )
 
         for coord_str in (lat_str, long_str):
-            if not dms_regex.fullmatch( # re.fullmatch to protect against prefix/postfix garbage
-                coord_str 
-            ):                  
+            if not dms_regex.fullmatch(  # re.fullmatch to protect against prefix/postfix garbage
+                coord_str
+            ):
                 return False
         return True
 
