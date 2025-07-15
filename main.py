@@ -105,6 +105,10 @@ class MainWindow(QMainWindow):
         self.EStopButton.clicked.connect(self.emergency_stop)
         self.predictionStartButton.clicked.connect(self.set_predict_track)
 
+        lambda: self.save_serial(
+            f"log_{datetime.datetime.now(tz=datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')}.txt"
+        )
+
     def refresh_ports(self, combo_box, port_names_list: list, target: str) -> None:
         """Refresh available serial ports in combo box.
 
@@ -696,7 +700,7 @@ class MainWindow(QMainWindow):
         """Clear the serial status display box."""
         self.statusBox.clear()
 
-    def save_serial(self, rel_file_path: str, lines_from_bottom: int | None) -> None:
+    def save_serial(self, rel_file_path: str, from_bottom: int | None = None) -> None:
         """Saves the statusBox text to a file in a relative path
 
         Raises:
@@ -704,22 +708,29 @@ class MainWindow(QMainWindow):
 
         Args:
             rel_file_path: Relative file path string to destination.
-            lines: Number of lines to save off the end of the statusBox.
-                   If left blank will save whole file.
+            from_bottom: Number of lines to save off the end of the statusBox.
+                         If left blank will save whole file.
         """
 
-        base_dir = os.path.dirname(os.path.abspath(__file__))  # directory of main.py
+        base_dir = (
+            os.path.dirname(os.path.abspath(__file__)) + "/"
+        )  # directory of main.py
         built_path = base_dir + rel_file_path
 
         try:
             with open(built_path, "x") as f:
-                if lines_from_bottom:
+                if from_bottom:
                     lines = str(self.statusBox.toPlainText()).split("\n")
                     # toPlainText returns a QString, split method expects a str
                     # so wrapping in str() to be safe
-                    extracted_text = "\n".join(lines[-lines_from_bottom:])
+                    extracted_text = "\n".join(lines[-from_bottom:])
                     f.write(extracted_text)
-                f.write(str(self.statusBox.toPlainText()))
+                else:
+                    f.write(str(self.statusBox.toPlainText()))
+        except FileExistsError as err:
+            print(f"open with x flag threw file exists error: {err.strerror}")
+            return None
+
         except OSError as err:
             print(f"File already exists: {err.strerror}")
             raise
