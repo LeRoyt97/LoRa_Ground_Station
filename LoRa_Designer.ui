@@ -26,6 +26,9 @@
      </widget>
     </item>
     <item row="2" column="0">
+          <!-- todo: maybe instead of TextBrowser we want TextEdit in readonly mode.-->
+          <!-- todo: we dont need to follow links. -->
+          <!-- todo: if not broken dont fix it, but still worth looking at imo -->
      <widget class="QTextBrowser" name="statusBox">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Preferred">

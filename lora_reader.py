@@ -38,7 +38,7 @@ class LoraReader(threading.Thread):
     def __init__(
         self, port: str, window, baudrate: int = 115200, callback=None
     ) -> None:
-        """Initialize LoRa reader thread for telemetry reception.
+        """Initialize LoRa reader thread.
 
         Args:
             port: Serial port identifier (e.g., 'COM3', '/dev/ttyUSB0')
