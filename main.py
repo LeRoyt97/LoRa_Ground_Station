@@ -144,7 +144,7 @@ class MainWindow(QMainWindow):
             self.statusBox.append(f"Refresh ports error: {err}")
 
     def start_lora_reader(self) -> None:
-        """Start LoRa reader thread for receiving telemetry data."""
+        """Start LoRa reader thread for receiving  data."""
 
         # print("Select button clicked")
         selected_index = self.LoRaComboBox.currentIndex()
@@ -696,20 +696,50 @@ class MainWindow(QMainWindow):
         """Clear the serial status display box."""
         self.statusBox.clear()
 
+    def save_serial(self, rel_file_path: str, lines_from_bottom: int | None) -> None:
+        """Saves the statusBox text to a file in a relative path
+
+        Raises:
+            OSError if file already exists at rel_file_path
+
+        Args:
+            rel_file_path: Relative file path string to destination.
+            lines: Number of lines to save off the end of the statusBox.
+                   If left blank will save whole file.
+        """
+
+        base_dir = os.path.dirname(os.path.abspath(__file__))  # directory of main.py
+        built_path = base_dir + rel_file_path
+
+        try:
+            with open(built_path, "x") as f:
+                if lines_from_bottom:
+                    lines = str(self.statusBox.toPlainText()).split("\n")
+                    # toPlainText returns a QString, split method expects a str
+                    # so wrapping in str() to be safe
+                    extracted_text = "\n".join(lines[-lines_from_bottom:])
+                    f.write(extracted_text)
+                f.write(str(self.statusBox.toPlainText()))
+        except OSError as err:
+            print(f"File already exists: {err.strerror}")
+            raise
+
+        return None
+
 
 class Worker(QObject):
     # worker class to track without making the GUI hang
     finished = pyqtSignal()
     calculation_signal = pyqtSignal(float, float, float)
 
-    def __init__(self, reader) -> None:
+    def __init__(self, lora_reader) -> None:
         """Initialize worker thread for tracking operations.
 
         Args:
-            reader: LoRa reader instance for telemetry data reception
+            reader: LoRa reader instance for data reception
         """
         super().__init__()
-        self.reader = reader
+        self.reader = lora_reader
         self.iteration_count = 0
 
     def track(self) -> None:
@@ -791,7 +821,7 @@ class Worker(QObject):
         Uses motion prediction to anticipate balloon position and
         maintain tracking during communication gaps. Calculates
         velocity vectors and predicts future positions when no
-        new telemetry data is received.
+        new data is received.
 
         Note:
             Saves tracking data to CSV file for analysis
