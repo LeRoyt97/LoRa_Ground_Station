@@ -818,7 +818,7 @@ p, li { white-space: pre-wrap; }
        <attribute name="title">
         <string>Balloon Commands</string>
        </attribute>
-       <widget class="QGroupBox" name="groupBox_3">
+       <widget class="QGroupBox" name="CommandBox">
         <property name="geometry">
          <rect>
           <x>10</x>
