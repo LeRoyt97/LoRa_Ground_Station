@@ -1,5 +1,7 @@
 import dataclasses
 import re
+from difflib import Match
+
 import serial
 import threading
 
@@ -206,3 +208,18 @@ class LoraReader(threading.Thread):
             return coordinate
         else:
             return float(coordinate_string)
+
+
+class LoRaCommandSender:
+    def __init__(self, serial_port):
+        self.serial_port = serial_port
+
+    def send_command(self, command: str) -> None:
+        valid_commands = ["IDLE", "CUT", "OPEN", "CLOSE"]
+        try:
+            if command in valid_commands:
+                self.serial_port.write(command.encode("ascii"))
+            else:
+                print(f"Invalid command: {command}")
+        except Exception as err:
+            print(f"Error sending commands: {err}")

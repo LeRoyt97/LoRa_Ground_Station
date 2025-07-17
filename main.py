@@ -1,7 +1,14 @@
-from PyQt5.QtCore import pyqtSlot, pyqtSignal, QObject, QThread
+import os
+import re
+from _pyrepl import reader
+from lora_reader import LoraReader, LoraDataObject, LoRaCommandSender
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.uic import loadUi
-from _pyrepl import reader
+import sys
+from PyQt5.QtCore import pyqtSlot, pyqtSignal, QObject, QThread
+import serial
+import serial.tools.list_ports
+import time
 from ground_station_arduino import GroundStationArduino
 from lora_reader import LoraReader, LoraDataObject
 from satellite_tracking_math import TrackingMath
@@ -44,6 +51,7 @@ class MainWindow(QMainWindow):
 
         # === Hardware Interfaces and Threads ===
         self.reader = None
+        self.lora_command_sender = None
         self.ground_station_arduino = None
         self.track_thread = None
         self.worker = None
@@ -92,6 +100,12 @@ class MainWindow(QMainWindow):
         self.ClockWiseButton.clicked.connect(self.pan_counter_clockwise)
         self.CounterClockeWiseButton.clicked.connect(self.pan_clockwise)
         self.log_signal.connect(self.display_data)
+
+        # === Connect Command Buttons ===
+        self.IdleCommandButton.clicked.connect(lambda: self.try_send_command("IDLE"))
+        self.CutCommandButton.clicked.connect(lambda: self.try_send_command("CUT"))
+        self.OpenCommandButton.clicked.connect(lambda: self.try_send_command("OPEN"))
+        self.CloseCommandButton.clicked.connect(lambda: self.try_send_command("CLOSE"))
 
         # === Connect SetUp Buttons ===
         self.setGSLocationButton.clicked.connect(self.set_ground_station_location)
@@ -148,8 +162,7 @@ class MainWindow(QMainWindow):
             self.statusBox.append(f"Refresh ports error: {err}")
 
     def start_lora_reader(self) -> None:
-        """Start LoRa reader thread for receiving  data."""
-
+        """Start LoRa reader thread for receiving telemetry data."""
         # print("Select button clicked")
         selected_index = self.LoRaComboBox.currentIndex()
 
@@ -164,6 +177,9 @@ class MainWindow(QMainWindow):
                 )
                 self.reader.start()
                 self.is_lora_listening = True
+
+                self.lora_command_sender = LoRaCommandSender(self.reader.serial_port)
+
             except Exception as err:
                 self.log_signal.emit(f"Error in LoRaReader: {err}")
             # print("LoRaReader thread Started")
@@ -270,6 +286,18 @@ class MainWindow(QMainWindow):
 
         return
 
+    def try_send_command(self, command: str) -> None:
+        if hasattr(self, "lora_command_sender"):
+            try:
+                self.lora_command_sender.send_command(command)
+                self.statusBox.append(f"Sent command: {command}")
+            except Exception as err:
+                self.statusBox.append(f"Failed to send {command}: {err}")
+        else:
+            self.statusBox.append(
+                "LoRa not connected. Please select a LoRa port first."
+            )
+
     def display_data(self, data: str) -> None:
         """Display received data in status box.
 
@@ -282,6 +310,11 @@ class MainWindow(QMainWindow):
 
         # Called from LoraReader thread - must use signal-safe method
         self.statusBox.append(data)
+
+        if self.AutoScrollCheckBox.isChecked():
+            self.statusBox.verticalScrollBar().setValue(
+                self.statusBox.verticalScrollBar().maximum()
+            )
 
     @staticmethod
     def is_dms_gps(lat_str: str, long_str: str) -> bool:
@@ -570,7 +603,6 @@ class MainWindow(QMainWindow):
                     self.call_predict_track()
                 else:
                     self.statusBox.append("Starting tracking!")
-                    print("starting tracking!")
                     self.call_track()
                     return True
             else:
@@ -578,6 +610,7 @@ class MainWindow(QMainWindow):
                 return False
         except Exception as err:
             print(f"check_if_ready error: {err}")
+            return False
 
     def call_track(self) -> None:
         """Start basic tracking thread without prediction.
