@@ -1,29 +1,25 @@
-import os
-import re
-from _pyrepl import reader
-from lora_reader import LoraReader, LoraDataObject, LoRaCommandSender
-from PyQt5.QtWidgets import QApplication, QMainWindow
-from PyQt5.uic import loadUi
-import sys
-from PyQt5.QtCore import pyqtSlot, pyqtSignal, QObject, QThread
-import serial
-import serial.tools.list_ports
-import time
-from ground_station_arduino import GroundStationArduino
-from lora_reader import LoraReader, LoraDataObject
-from satellite_tracking_math import TrackingMath
-from sun_position import sunpos
+from lora_reader import LoRaCommandSender
 import csv
 import datetime
-import matplotlib.pyplot as plt
-import numpy as np
 import os
 import re
-import serial
-import serial.tools.list_ports
-import statistics
 import sys
 import time
+
+import serial
+import serial.tools.list_ports
+import serial.tools.list_ports
+from PyQt5.QtCore import pyqtSignal, QObject, QThread
+from PyQt5.QtWidgets import QApplication, QMainWindow
+from PyQt5.uic import loadUi
+
+from ground_station_arduino import GroundStationArduino
+
+# from lora_reader import LoRaCommandSender
+from lora_reader import LoraReader
+from satellite_tracking_math import TrackingMath
+from sun_position import sunpos
+
 
 # todo: Set up Balloon Command functionality
 
@@ -119,8 +115,10 @@ class MainWindow(QMainWindow):
         self.EStopButton.clicked.connect(self.emergency_stop)
         self.predictionStartButton.clicked.connect(self.set_predict_track)
 
-        lambda: self.save_serial(
-            f"log_{datetime.datetime.now(tz=datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')}.txt"
+        self.actionSave_Serial.triggered.connect(
+            lambda: self.save_serial(
+                f"log_{datetime.datetime.now(tz=datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')}.txt"
+            )
         )
 
     def refresh_ports(self, combo_box, port_names_list: list, target: str) -> None:
@@ -601,6 +599,7 @@ class MainWindow(QMainWindow):
                 if self.is_predicting_track:
                     self.statusBox.append("Starting tracking with predictions!")
                     self.call_predict_track()
+                    return True
                 else:
                     self.statusBox.append("Starting tracking!")
                     self.call_track()
@@ -608,6 +607,7 @@ class MainWindow(QMainWindow):
             else:
                 print("not ready to track yet")
                 return False
+
         except Exception as err:
             print(f"check_if_ready error: {err}")
             return False
@@ -780,7 +780,7 @@ class Worker(QObject):
         """Initialize worker thread for tracking operations.
 
         Args:
-            reader: LoRa reader instance for data reception
+            lora_reader: LoRa reader instance for data reception
         """
         super().__init__()
         self.reader = lora_reader
