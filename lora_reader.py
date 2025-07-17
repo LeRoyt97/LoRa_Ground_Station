@@ -146,10 +146,10 @@ class LoraReader(threading.Thread):
         else:
             try:
                 identifier_one = fields[0].strip()
-                raw_latitude = fields[1].strip()
+                latitude = self.convert_to_decimal_degrees(fields[1].strip())
                 longitude = self.convert_to_decimal_degrees(fields[2].strip())
-                latitude = self.convert_to_decimal_degrees(fields[3].strip())
-                altitude = float(fields[4].strip())
+                altitude = float(fields[3].strip())
+                last_sent = fields[4].strip()
                 last_complete = fields[5].strip()
                 identifier_two = fields[6].strip()
                 rssi = float(fields[7].strip())
