@@ -1,5 +1,7 @@
 import dataclasses
 import re
+from difflib import Match
+
 import serial
 import threading
 
@@ -19,6 +21,8 @@ class LoraDataObject:
         last_sent: Timestamp or sequence number of last transmission sent
         last_complete: Timestamp or sequence number of last complete transmission
         identifier_two: Secondary identifier string for validation
+        rssi: Received Signal Strength Indicator in dBm
+        snr: LoRa Signal to Noise Ratio in dB
 
     Note:
         Used for safety-critical balloon tracking operations. Coordinate
@@ -32,6 +36,8 @@ class LoraDataObject:
     last_sent: str
     last_complete: str
     identifier_two: str
+    rssi: float
+    snr: float
 
 
 class LoraReader(threading.Thread):
@@ -109,7 +115,7 @@ class LoraReader(threading.Thread):
         """Parse raw LoRa data string into structured object.
 
         Validates and converts colon-separated data into LoraDataObject.
-        Expected format: identifier:lat:lon:alt:last_sent:last_complete:identifier
+        Expected format: identifier:lat:lon:alt:last_sent:last_complete:identifier:rssi:snr
 
         Args:
             line: Raw LoRa data string from serial port
@@ -125,46 +131,54 @@ class LoraReader(threading.Thread):
 
         # Skip lines with any forbidden characters
         if not re.match(r"^[\w\s:.,+-]*$", line):
-            print(f"Ignored malformed line (bad characters): {line}")
+            print(
+                f"Ignored malformed line (bad characters): {line}"
+            )  # todo: make this info more useful. Count lines and calculate % of lines that are bad?
             self.window.statusBox.append(
                 f"Ignored malformed line (bad characters): {line}"
             )
             return None
 
         fields = line.split(":")
-        if len(fields) < 7:
-            print(f"Not enough fields, RAW: {line}")
-            self.window.statusBox.append(f"Not enough fields, RAW: {line}")
+        if len(fields) != 9:
             return None
 
-        try:
-            identifier_one = fields[0].strip()
-            latitude = self.convert_to_decimal_degrees(fields[1].strip())
-            longitude = self.convert_to_decimal_degrees(fields[2].strip())
-            altitude = float(fields[3].strip())
-            last_sent = fields[4].strip()
-            last_complete = fields[5].strip()
-            identifier_two = fields[6].strip()
+        else:
+            try:
+                identifier_one = fields[0].strip()
+                raw_latitude = fields[1].strip()
+                raw_longitude = fields[2].strip()
+                raw_altitude = fields[3].strip()
+                last_sent = fields[4].strip()
+                last_complete = fields[5].strip()
+                identifier_two = fields[6].strip()
+                rssi = float(fields[7].strip())
+                snr = float(fields[8].strip())
 
-            return LoraDataObject(
-                identifier_one=identifier_one,
-                latitude=latitude,
-                longitude=longitude,
-                altitude=altitude,
-                last_sent=last_sent,
-                last_complete=last_complete,
-                identifier_two=identifier_two,
-            )
+                latitude = self.convert_to_decimal_degrees(raw_latitude)
+                longitude = self.convert_to_decimal_degrees(raw_longitude)
+                altitude = float(raw_altitude)
 
-        except (ValueError, IndexError) as e:
+                return LoraDataObject(
+                    identifier_one=identifier_one,
+                    latitude=latitude,
+                    longitude=longitude,
+                    altitude=altitude,
+                    last_sent=last_sent,
+                    last_complete=last_complete,
+                    identifier_two=identifier_two,
+                    rssi=rssi,
+                    snr=snr,
+                )
 
-            print(f"Parsing error: {e} | RAW: {line}")
-            self.window.statusBox.append(f"Parsing error: RAW: {line}")
-            return None
-        except Exception as e:
-            print(f"Error parsing LoraData: {e}")
-            self.window.statusBox.append(f"Error parsing LoraData: {e}")
-            return None
+            except (ValueError, IndexError) as e:
+                print(f"Parsing error: {e} | RAW: {line}")
+                self.window.statusBox.append(f"Parsing error: RAW: {line}")
+                return None
+            except Exception as e:
+                print(f"Error parsing LoraData: {e}")
+                self.window.statusBox.append(f"Error parsing LoraData: {e}")
+                return None
 
     @staticmethod
     def convert_to_decimal_degrees(coordinate_string: str) -> float:
@@ -194,3 +208,18 @@ class LoraReader(threading.Thread):
             return coordinate
         else:
             return float(coordinate_string)
+
+
+class LoRaCommandSender:
+    def __init__(self, serial_port):
+        self.serial_port = serial_port
+
+    def send_command(self, command: str) -> None:
+        valid_commands = ["IDLE", "CUT", "OPEN", "CLOSE"]
+        try:
+            if command in valid_commands:
+                self.serial_port.write(command.encode("ascii"))
+            else:
+                print(f"Invalid command: {command}")
+        except Exception as err:
+            print(f"Error sending commands: {err}")
