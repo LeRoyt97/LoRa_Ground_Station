@@ -2,6 +2,7 @@ import dataclasses
 import sqlite3
 import json
 import os
+import re
 from datetime import datetime, timezone
 from typing import List, Optional, Union, Dict
 from dataclasses import field
@@ -45,32 +46,26 @@ CREATE INDEX idx_packet_timestamp ON packet_records(receive_timestamp);
 class PacketRecord:
     """Complete LoRa packet record for persistent storage.
 
-    Contains all telemetry data, reception metadata, and validation status
-    for comprehensive flight analysis and debugging. Used as database
-    storage format to preserve complete packet history.
+    Wraps GPSPoint with additional metadata for database storage and analysis.
+    Contains reception metadata and validation status for comprehensive flight
+    analysis and debugging.
 
     Data Flow Architecture:
-        Raw LoRa → LoraDataObject → PacketRecord (DB storage)
-                                 ↘
-                                  GPSPoint (real-time tracking)
+        Raw LoRa → LoraDataObject → GPSPoint (real-time tracking)
+                                      ↓
+                                  PacketRecord (DB storage)
 
     Attributes:
-        receive_timestamp: When ground station received packet (ISO format string)
-        lora_data: Complete parsed telemetry from balloon
-        raw_packet: Original packet string for debugging
-        packet_sequence: Expected sequence number (if available)
+        gps_point: Core GPS telemetry data with computed metrics
         signal_quality: Reception quality metrics dictionary
         validation_errors: List of validation issues found
-        ground_station_location: Receiving station coordinates (lat, lon)
+        ground_station_location: Ground station coordinates when packet received
     """
 
-    receive_timestamp: str
-    lora_data: LoraDataObject
-    raw_packet: str
-    packet_sequence: Optional[int] = None
+    gps_point: GPSPoint
     signal_quality: Optional[Dict[str, float]] = None  # {'rssi': -85, 'snr': 8.5}
     validation_errors: List[str] = field(default_factory=list)
-    ground_station_location: Optional[tuple] = None  # (lat, lon)
+    ground_station_location: Optional[dict] = None  # {'lat': float, 'lon': float}
 
 
 @dataclasses.dataclass
@@ -88,9 +83,9 @@ class GPSPoint:
         distance_from_previous: Distance in meters from last valid point (optional)
     """
 
-    timestamp: str
+    timestamp: str = "N/A"
     lora_data: LoraDataObject
-    is_valid: bool
+    is_valid: bool = True
     velocity: Optional[float] = None
     distance_from_previous: Optional[float] = None
 
@@ -103,15 +98,23 @@ class FlightTracker:
     flight session management, and track export functionality.
     """
 
-    def __init__(self, db_path: str = "flight_data.db") -> None:
+    def __init__(self, ground_station_coords: dict, db_path: str = "flight_data.db") -> None:
         """Initialize flight tracker with empty session and database connection.
 
         Creates new flight session storage and establishes connection to
         persistent SQLite database for historical flight data.
 
         Args:
+            ground_station_coords: Ground station coordinates dict with 'lat' and 'lon' keys (required)
             db_path: Path to SQLite database file, defaults to "flight_data.db"
         """
+        # Validate ground station coordinates
+        if not isinstance(ground_station_coords, dict):
+            raise TypeError("ground_station_coords must be a dictionary")
+        if 'lat' not in ground_station_coords or 'lon' not in ground_station_coords:
+            raise ValueError("ground_station_coords must contain 'lat' and 'lon' keys")
+        
+        self.ground_station_coords = ground_station_coords
         self.db_path = db_path
         self.points_till_backup = BACKUP_INTERVAL
         self.db = self._initialize_database()
@@ -151,10 +154,13 @@ class FlightTracker:
         # Validate GPS coordinates
         is_valid = self._validate_gps_point(lora_data)
 
+        if not is_valid:
+            raise ValueError(f"The passed LoraDataObject has invalid GPS coordinates.\nLon: {lora_data.longitude}, Lat: {lora_data.latitude}")
+
         # Calculate velocity and distance if we have previous points
         velocity = None
         distance_from_previous = None
-        if self.current_session_points and is_valid:
+        if self.current_session_points:
             last_valid_point = None
             for point in reversed(self.current_session_points):
                 if point.is_valid:
@@ -190,7 +196,7 @@ class FlightTracker:
         self.current_session_points.append(gps_point)
 
         # Periodic database backup
-        # Backup every 20 new points
+        # Backup every {BACKUP_INTERVAL} new points
         self.points_till_backup -= 1
         if self.points_till_backup == 0:
             self._backup_to_database()
@@ -198,7 +204,7 @@ class FlightTracker:
 
         return is_valid
 
-    def get_recent_points(self, n: int = 50) -> List[GPSPoint]:
+    def get_recent_valid_points(self, n: int = 50) -> List[GPSPoint]:
         """Retrieve most recent GPS points for real-time map display.
 
         Returns the last N GPS points from current flight session, filtered
@@ -249,7 +255,7 @@ class FlightTracker:
         else:
             return [point for point in self.current_session_points if point.is_valid]
 
-    def start_new_flight(self, flight_notes: str = "", store_old_invalid: bool = False) -> bool:
+    def start_new_flight(self, flight_notes: str = "N/A", store_old_invalid: bool = False) -> bool:
         """Begin new flight session and archive current track data.
 
         Saves current flight track to persistent database, resets session
@@ -273,33 +279,75 @@ class FlightTracker:
             Ensure all analysis is complete before calling this method.
             By default does not store invalid entries.
         """
-        '''
-        if there is already data -> create new entry and store what we got
-        if there isn't already flight data -> create new entry in the db
-        '''
         if not re.match(r"^[\w -]*$", flight_notes):
             raise ValueError(
                 "flight_notes may only contain alphanumerics, spaces, hyphens, and underscores"
             )
-            return False
+
         cursor = self.db.cursor()
+        # check if we need to store previous flight data
         if self.current_session_points and self.current_flight_id:
+            # Store the old session data into database
             points = self.get_full_history(include_invalid=store_old_invalid)
             for point in points:
-                packet_record = PacketRecord(
-                    receive_timestamp=point.timestamp,
-                    lora_data=point.lora_data,
-                    raw_packet: str,
-                    packet_sequence: Optional[int] = None,
-                    signal_quality: Optional[Dict[str, float]] = None, # {'rssi': -85, 'snr': 8.5}
-                    validation_errors: List[str] = field(default_factory=list),
-                    ground_station_location: Optional[tuple] = None  # (lat, lon)
+                validation_errors = []
+                if point.lora_data.malformed: 
+                    validation_errors.append("Invalid LoRa String.")
+                elif not self._validate_gps_point(point.lora_data):
+                    validation_errors.append("Invalid GPS information.")
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO packet_records 
+                    (flight_id, receive_timestamp, raw_packet, latitude, longitude, 
+                     altitude, rssi, snr, validation_errors)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        self.current_flight_id,
+                        point.timestamp,
+                        point.lora_data.raw_lora_string,
+                        point.lora_data.latitude,
+                        point.lora_data.longitude,
+                        point.lora_data.altitude,
+                        point.lora_data.rssi,
+                        point.lora_data.snr,
+                        json.dumps(validation_errors)
+                    ),
                 )
+            # update the end time of the current flight
+            cursor.execute(
+                """
+                UPDATE flights
+                SET end_time = ?
+                WHERE flight_id = ?
+                """,
+                (
+                    datetime.now(timezone.utc).isoformat(),
+                    self.current_flight_id
+                )
+            )
+            self.db.commit()
+        # if not currently in a flight
+        # create new row in flight
+        cursor.execute(
+            """
+            INSERT INTO flights (start_time, notes, ground_station_lat, ground_station_lon)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                datetime.now(timezone.utc).isoformat(),
+                flight_notes,
+                self.ground_station_coords['lat'],
+                self.ground_station_coords['lon']
+            )
+        )
+        self.current_session_points = []
+        self.current_flight_id = cursor.lastrowid
+        self.db.commit()
 
 
 
-        else:
-        pass
+
 
     def export_track(self, format: str = "gpx", filename: Optional[str] = None) -> str:
         """Export current flight track to standard GPS file format.
@@ -362,12 +410,15 @@ class FlightTracker:
 
         return True
 
-    def _backup_to_database(self) -> bool:
+    def _backup_to_database(self, include_invalid: bool = True) -> bool:
         """Perform incremental backup of current session to persistent storage.
 
         Saves recent GPS points to SQLite database for crash recovery
         without disrupting current flight operations. Called automatically
         during normal operation.
+
+        Args:
+            include_invalid: Whether to backup invalid GPS points, defaults to True
 
         Returns:
             True if backup completed successfully,
@@ -389,14 +440,18 @@ class FlightTracker:
             points_to_backup = self.current_session_points[-BACKUP_INTERVAL:]
 
             for point in points_to_backup:
+                # Skip invalid points if include_invalid is False
+                if not include_invalid and not point.is_valid:
+                    continue
+                    
                 # Create PacketRecord for database storage
                 packet_record = PacketRecord(
-                    receive_timestamp=point.timestamp,
-                    lora_data=point.lora_data,
-                    raw_packet=f"{point.lora_data.identifier_one}:{point.lora_data.latitude}:{point.lora_data.longitude}:{point.lora_data.altitude}:{point.lora_data.last_sent}:{point.lora_data.last_complete}:{point.lora_data.identifier_two}:{point.lora_data.rssi}:{point.lora_data.snr}",
+                    gps_point=point,
+                    signal_quality={"rssi": point.lora_data.rssi, "snr": point.lora_data.snr},
                     validation_errors=(
                         [] if point.is_valid else ["GPS validation failed"]
                     ),
+                    ground_station_location=self.ground_station_coords,
                 )
 
                 # Insert into database
@@ -409,13 +464,13 @@ class FlightTracker:
                 """,
                     (
                         self.current_flight_id,
-                        packet_record.receive_timestamp,
-                        packet_record.raw_packet,
-                        packet_record.lora_data.latitude,
-                        packet_record.lora_data.longitude,
-                        packet_record.lora_data.altitude,
-                        packet_record.lora_data.rssi,
-                        packet_record.lora_data.snr,
+                        packet_record.gps_point.timestamp,
+                        packet_record.gps_point.lora_data.raw_lora_string,
+                        packet_record.gps_point.lora_data.latitude,
+                        packet_record.gps_point.lora_data.longitude,
+                        packet_record.gps_point.lora_data.altitude,
+                        packet_record.gps_point.lora_data.rssi,
+                        packet_record.gps_point.lora_data.snr,
                         json.dumps(packet_record.validation_errors),
                     ),
                 )
