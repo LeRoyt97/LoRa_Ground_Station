@@ -96,11 +96,19 @@ class MainWindow(QMainWindow):
         self.CounterClockeWiseButton.clicked.connect(self.pan_clockwise)
         self.log_signal.connect(self.display_data)
 
-        # === Connect Command Buttons ===
-        self.IdleCommandButton.clicked.connect(lambda: self.try_send_command("IDLE"))
-        self.CutCommandButton.clicked.connect(lambda: self.try_send_command("CUT"))
-        self.OpenCommandButton.clicked.connect(lambda: self.try_send_command("OPEN"))
-        self.CloseCommandButton.clicked.connect(lambda: self.try_send_command("CLOSE"))
+        # === Connect Command Buttons and Variables ===
+        self.command = None
+
+        self.IdleCommandButton.clicked.connect(
+            lambda: self.try_send_command("00000000")
+        )
+        self.CutCommandButton.clicked.connect(lambda: self.try_send_command("11111111"))
+        self.OpenCommandButton.clicked.connect(
+            lambda: self.try_send_command("22222222")
+        )
+        self.CloseCommandButton.clicked.connect(
+            lambda: self.try_send_command("33333333")
+        )
 
         # === Connect SetUp Buttons ===
         self.setGSLocationButton.clicked.connect(self.set_ground_station_location)
@@ -114,6 +122,7 @@ class MainWindow(QMainWindow):
         self.EStopButton.clicked.connect(self.emergency_stop)
         self.predictionStartButton.clicked.connect(self.set_predict_track)
 
+        # === Connect Save_Serial Action ===
         self.actionSave_Serial.triggered.connect(
             lambda: self.save_serial(
                 f"log_{datetime.datetime.now(tz=datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')}.txt"
@@ -280,13 +289,25 @@ class MainWindow(QMainWindow):
 
         return
 
-    def try_send_command(self, command: str) -> None:
+    def try_send_command(self, packet: str) -> None:
+        match packet:  # match/case to print readable feedback to statusBox
+            case "00000000":
+                self.command = "IDLE"
+            case "11111111":
+                self.command = "CUT"
+            case "22222222":
+                self.command = "OPEN"
+            case "33333333":
+                self.command = "CLOSE"
+            case _:
+                self.command = packet
+
         if hasattr(self, "lora_command_sender"):
             try:
-                self.lora_command_sender.send_command(command)
-                self.statusBox.append(f"Sent command: {command}")
+                self.lora_command_sender.send_command(packet)
+                self.statusBox.append(f"Sending command: {self.command}")
             except Exception as err:
-                self.statusBox.append(f"Failed to send {command}: {err}")
+                self.statusBox.append(f"Failed to send {self.command}: {err}")
         else:
             self.statusBox.append(
                 "LoRa not connected. Please select a LoRa port first."
