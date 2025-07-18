@@ -1,7 +1,69 @@
 import dataclasses
-import datetime
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict
+from dataclasses import field
 from lora_reader import LoraDataObject
+
+"""
+-- Flight sessions
+CREATE TABLE flights (
+    flight_id INTEGER PRIMARY KEY,
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
+    notes TEXT,
+    ground_station_lat REAL,
+    ground_station_lon REAL
+);
+
+-- Complete packet records
+CREATE TABLE packet_records (
+    packet_id INTEGER PRIMARY KEY,
+    flight_id INTEGER,
+    receive_timestamp TIMESTAMP,
+    raw_packet TEXT,
+    latitude REAL,
+    longitude REAL,
+    altitude REAL,
+    rssi REAL,
+    snr REAL,
+    validation_errors TEXT,  -- JSON string
+    FOREIGN KEY (flight_id) REFERENCES flights(flight_id)
+);
+
+-- Index for time-based queries
+CREATE INDEX idx_packet_timestamp ON packet_records(receive_timestamp);
+"""
+
+
+@dataclasses.dataclass
+class PacketRecord:
+    """Complete LoRa packet record for persistent storage.
+
+    Contains all telemetry data, reception metadata, and validation status
+    for comprehensive flight analysis and debugging. Used as database
+    storage format to preserve complete packet history.
+
+    Data Flow Architecture:
+        Raw LoRa → LoraDataObject → PacketRecord (DB storage)
+                                 ↘
+                                  GPSPoint (real-time tracking)
+
+    Attributes:
+        receive_timestamp: When ground station received packet (ISO format string)
+        lora_data: Complete parsed telemetry from balloon
+        raw_packet: Original packet string for debugging
+        packet_sequence: Expected sequence number (if available)
+        signal_quality: Reception quality metrics dictionary
+        validation_errors: List of validation issues found
+        ground_station_location: Receiving station coordinates (lat, lon)
+    """
+
+    receive_timestamp: str
+    lora_data: LoraDataObject
+    raw_packet: str
+    packet_sequence: Optional[int] = None
+    signal_quality: Optional[Dict[str, float]] = None  # {'rssi': -85, 'snr': 8.5}
+    validation_errors: List[str] = field(default_factory=list)
+    ground_station_location: Optional[tuple] = None  # (lat, lon)
 
 
 @dataclasses.dataclass
@@ -12,14 +74,14 @@ class GPSPoint:
     status and computed metrics for flight path analysis.
 
     Attributes:
-        timestamp: UTC timestamp when GPS point was received
+        timestamp: UTC timestamp when GPS point was received (ISO format string)
         lora_data: Complete LoRa telemetry packet containing GPS coordinates
         is_valid: Whether GPS coordinates passed validation checks
         velocity: Computed ground speed in m/s from previous point (optional)
         distance_from_previous: Distance in meters from last valid point (optional)
     """
 
-    timestamp: datetime.datetime
+    timestamp: str
     lora_data: LoraDataObject
     is_valid: bool
     velocity: Optional[float] = None
@@ -45,9 +107,9 @@ class FlightTracker:
     def add_gps_point(self, lora_data: LoraDataObject) -> bool:
         """Add new GPS telemetry point to current flight track.
 
-        Validates incoming GPS data, creates timestamped track point, and appends
-        to current flight session. Performs basic validation checks and optionally
-        triggers periodic database backup for crash recovery.
+        Validates incoming GPS data, creates timestamped track point with current
+        ISO timestamp, and appends to current flight session. Performs basic
+        validation checks and optionally triggers periodic database backup.
 
         Args:
             lora_data: Parsed LoRa telemetry containing GPS coordinates, altitude,
