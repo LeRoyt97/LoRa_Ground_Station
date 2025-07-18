@@ -186,9 +186,6 @@ class MainWindow(QMainWindow):
 
     def start_arduino(self) -> None:
         """Initialize and connect to Arduino ground station controller."""
-        # checks if arduino is selected, and if the connection is not already made, instantiates an instance of
-        # the GroundStationArduino class
-        # if an arduino is connected, or one is not selected, the function returns
 
         selected_index = self.ArduinoComboBox.currentIndex()
 
