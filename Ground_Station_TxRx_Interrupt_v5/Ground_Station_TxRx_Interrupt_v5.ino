@@ -22,9 +22,9 @@
 // Declare Variables
 unsigned long Tx_mark = 0;              // Marks time zero
 bool Tx_ok = false;                     // Are we in the Tx window: true or false
-int packetSendCount = 0;
+int packetSendCount = 1;
 String packet = "";
-String cmd = "";
+String command = "";
 bool Tx_window_changed = true;          // Window Change notification
 bool wait_for_next_Tx_window = true;    // If sent in the middle of Tx wait till next window
 int number_of_packets = 7;              // Number of packets to send. Indexed from 1!!
@@ -71,27 +71,21 @@ void loop() {
     Serial.print(LoRa.packetRssi());
     Serial.print(":");
     Serial.println(LoRa.packetSnr());
-    
-
-
   }
+
+
   // **************************Check ID_BITs for Tx window **************************
   if (packet[ID_BIT1] ==  Tx_ID && packet[packet.length()-1] ==  Tx_ID && wait_for_next_Tx_window==true) {
     if (Tx_window_changed == true) {
       Serial.println("Tx window now open");
       Tx_window_changed = false;
     }
-
-    if (cmd == "IDLE") {          // If there is a command stored and Tx window is open, send it
-      idleCmd();
-    } else if (cmd == "CUT") {
-      cutCmd();
-    } else if (cmd == "OPEN") {
-      openCmd();
-    } else if (cmd == "CLOSE") {
-      closeCmd();
-    }
   }
+
+  if (command != "") {           // If there is a command stored and Tx window is open, send it
+    send_command();
+  }
+  
 
   if (Tx_window_changed == false && packet[ID_BIT1] ==  '0') {    // Reset Indicator
     Serial.println("Tx window closed");
@@ -102,25 +96,22 @@ void loop() {
 
   // **************************Check for keyboard input**************************
   if (Serial.available()) {
-    cmd = Serial.readStringUntil('\n');
-    cmd.trim(); // Remove whitespace and newlines
-    cmd.toUpperCase(); // Make it case-insensitive
+    command = Serial.readStringUntil('\n');
+    command.trim(); // Remove whitespace and newlines
+    command.toUpperCase(); // Make it case-insensitive
 
     if (packet[ID_BIT1] ==  Tx_ID && packet[packet.length()-1] ==  Tx_ID) {   // If in Tx window, wait until next window
-      if (cmd == "CUT" or cmd == "OPEN" or cmd == "CLOSE" or cmd == "IDLE") {
-        Serial.print("\nWaiting till next Tx Window will send: ");
-        Serial.println(cmd);
+      if (command == "CUT" or command == "OPEN" or command == "CLOSE" or command == "IDLE") {
+        Serial.print("\nWaiting untill next Tx Window to send");
         Serial.println("");
         wait_for_next_Tx_window = false;
       } else {
-        Serial.print(cmd);
+        Serial.print(command);
         Serial.println(" is unknown. Retry");
       }
     } else {          // If not in Tx window store command prompt and indicate when command will be sent
       Serial.println("");
-      Serial.print("Not in Tx window. Will Send ");  
-      Serial.print(cmd);
-      Serial.println(" when Tx_ID is received");
+      Serial.print("Not in Tx window. Will Send when Tx_ID is received");
       Serial.println("");
       }    
 
@@ -128,106 +119,27 @@ void loop() {
 }
 
 
-
-//-----------------------------IDLE COMMAND-----------------------------
-void idleCmd() {
-  Serial.println("Sending idle...");
-
+// **************************General COMMAND**************************
+void send_command() {
   LoRa.idle();                    // Give radio time to get ready
 
   while (packetSendCount <= number_of_packets) {   // Send specified # of packets
     LoRa.beginPacket();             // Prepare and Send Packet
-    LoRa.print(IDLE);
+    LoRa.print(command);
     LoRa.endPacket();
 
-    packetSendCount++;
     Serial.print("                ");
     Serial.print(packetSendCount);
     Serial.println(" Packets sent");
+    packetSendCount++;
     delay(50);
   }
 
   packetSendCount = 1;
-  cmd = "";
+  command = "";
   Serial.println("Done Sending.");
   LoRa.receive();
   Serial.println("Back to listenting");
   
-}
-
-//-----------------------------CUT COMMAND-----------------------------
-void cutCmd() {
-  Serial.println("Sending cut...");
-
-  LoRa.idle();        // Give radio time to get ready
-
-  while (packetSendCount <= number_of_packets) {   // Send specified # of packets
-    LoRa.beginPacket(); // Prepare and Send Packet
-    LoRa.print(CUT);
-    LoRa.endPacket();
-
-
-    packetSendCount++;
-    Serial.print("                ");
-    Serial.print(packetSendCount);
-    Serial.println(" Packets sent");
-    delay(50);
-  }
-
-  packetSendCount = 1;
-  cmd = "";
-  Serial.println("Done Sending.");
-  LoRa.receive();
-  Serial.println("Back to listenting");
-}
-
-//-----------------------------OPEN COMMAND-----------------------------
-void openCmd() {
-  Serial.println("Sending open...");
-
-  LoRa.idle();                      // Give radio time to get ready
-
-  while (packetSendCount <= number_of_packets) {   // Send specified # of packets
-    LoRa.beginPacket();             // Prepare and Send Packet
-    LoRa.print(OPEN);
-    LoRa.endPacket();
-
-    packetSendCount++;
-    Serial.print("                ");
-    Serial.print(packetSendCount);
-    Serial.println(" Packets sent");
-    delay(50);
-  }
-
-  packetSendCount = 1;
-  cmd = "";
-  Serial.println("Done Sending.");
-  LoRa.receive();
-  Serial.println("Back to listenting");
-}
-
-//-----------------------------CLOSE COMMAND-----------------------------
-void closeCmd() {
-  Serial.println("Sending close...");
-
-  LoRa.idle();        // Give radio time to get ready
-
-  while (packetSendCount <= number_of_packets) {   // Send specified # of packets
-    LoRa.beginPacket(); // Prepare and Send Packet
-    LoRa.print(CLOSE);
-    LoRa.endPacket();
-
-    packetSendCount++;
-    Serial.print("                ");
-    Serial.print(packetSendCount);
-    Serial.println(" Packets sent");
-    delay(50);
-  }
-
-  packetSendCount = 1;
-  cmd = "";
-  Serial.println("Done Sending.");
-  LoRa.receive();
-  Serial.println("Back to listenting");
 }
 

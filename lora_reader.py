@@ -210,12 +210,8 @@ class LoRaCommandSender:
     def __init__(self, serial_port):
         self.serial_port = serial_port
 
-    def send_command(self, command: str) -> None:
-        valid_commands = ["IDLE", "CUT", "OPEN", "CLOSE"]
+    def send_command(self, packet: str) -> None:
         try:
-            if command in valid_commands:
-                self.serial_port.write(command.encode("ascii"))
-            else:
-                print(f"Invalid command: {command}")
+            self.serial_port.write(packet.encode("ascii"))
         except Exception as err:
             print(f"Error sending commands: {err}")
