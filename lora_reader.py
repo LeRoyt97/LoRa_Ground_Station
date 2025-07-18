@@ -2,6 +2,8 @@ import dataclasses
 import re
 from difflib import Match
 
+from typing import Optional
+
 import serial
 import threading
 
@@ -14,6 +16,8 @@ class LoraDataObject:
     containing position data and transmission metadata for balloon tracking.
 
     Attributes:
+        malformed: Bool indicating if packet contains invalid chars
+        raw_lora_string: The passed LoRa string
         identifier_one: Primary identifier string for the transmitter
         latitude: Geographic latitude in decimal degrees (-90 to +90)
         longitude: Geographic longitude in decimal degrees (-180 to +180)
@@ -29,6 +33,8 @@ class LoraDataObject:
         accuracy is essential for ground station pointing calculations.
     """
 
+    malformed: bool
+    raw_lora_string: str
     identifier_one: str
     latitude: float
     longitude: float
@@ -111,7 +117,7 @@ class LoraReader(threading.Thread):
 
         self.is_running = False
 
-    def parse_lora_data(self, line: str):
+    def parse_lora_data(self, line: str) -> Optional[LoraDataObject]:
         """Parse raw LoRa data string into structured object.
 
         Validates and converts colon-separated data into LoraDataObject.
@@ -126,22 +132,32 @@ class LoraReader(threading.Thread):
         Raises:
             ValueError: On coordinate conversion errors (handled internally)
             IndexError: On insufficient field count (handled internally)
-
         """
 
         # Skip lines with any forbidden characters
+        # todo:tariq Instead of just ignoring bad lines, i want to store them regardless
+        #            and handle what to do with them later.
         if not re.match(r"^[\w\s:.,+-]*$", line):
-            print(
-                f"Ignored malformed line (bad characters): {line}"
-            )  # todo: make this info more useful. Count lines and calculate % of lines that are bad?
-            self.window.statusBox.append(
-                f"Ignored malformed line (bad characters): {line}"
-            )
-            return None
+            malformed = True
+            # print(
+            #     f"Ignored malformed line (bad characters): {line}"
+            # )  
+            # # todo:leroy make this info more useful. Count lines and calculate % of lines that are bad?
+            # self.window.statusBox.append(
+            #     f"Ignored malformed line (bad characters): {line}"
+            # )
+            # return None
+        else:
+            malformed = False
+
 
         fields = line.split(":")
         if len(fields) != 9:
-            return None
+            raise IndexError("Raw LoRa data line should contain 9 fields.")
+            return LoraDataObject(
+                malformed=malformed,
+                raw_lora_string=line,
+                
 
         else:
             try:
@@ -156,6 +172,7 @@ class LoraReader(threading.Thread):
                 snr = float(fields[8].strip())
 
                 return LoraDataObject(
+                    raw_lora_string=line,
                     identifier_one=identifier_one,
                     latitude=latitude,
                     longitude=longitude,

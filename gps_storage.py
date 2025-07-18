@@ -7,6 +7,9 @@ from typing import List, Optional, Union, Dict
 from dataclasses import field
 from lora_reader import LoraDataObject
 
+BACKUP_INTERVAL = 100
+ROUGH_METERS_PER_DEGREE = 40075.0 / 360 # circumference ~= 40075 km
+
 """
 -- Flight sessions
 CREATE TABLE flights (
@@ -110,7 +113,7 @@ class FlightTracker:
             db_path: Path to SQLite database file, defaults to "flight_data.db"
         """
         self.db_path = db_path
-        self.points_till_backup = 100
+        self.points_till_backup = BACKUP_INTERVAL
         self.db = self._initialize_database()
         self.current_flight_id: Optional[int] = None
         self.current_session_points: List[GPSPoint] = []
@@ -135,7 +138,7 @@ class FlightTracker:
             TypeError: If lora_data is not a LoraDataObject instance
 
         Note:
-            Automatically triggers database backup every 100 points to prevent
+            Automatically triggers database backup every {BACKUP_INTERVAL} points to prevent
             data loss during extended flight operations. Invalid GPS fixes are
             stored but flagged for filtering during map display.
         """
@@ -159,19 +162,19 @@ class FlightTracker:
                     break
 
             if last_valid_point:
-                # Simple velocity calculation (could be enhanced with proper geodesic math)
-                time_diff = (
-                    datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-                    - datetime.fromisoformat(
-                        last_valid_point.timestamp.replace("Z", "+00:00")
-                    )
+                # Simple velocity calculation 
+                # todo:tariq enhance with proper geodesic math
+                # todo:tariq like the haversine formula
+                time_diff = ( 
+                    datetime.fromisoformat(timestamp) 
+                    - datetime.fromisoformat(last_valid_point.timestamp)
                 ).total_seconds()
                 if time_diff > 0:
                     lat_diff = lora_data.latitude - last_valid_point.lora_data.latitude
                     lon_diff = lora_data.longitude - last_valid_point.lora_data.longitude
-                    distance_from_previous = (
+                    distance_degrees_from_previous = (
                         (lat_diff**2 + lon_diff**2) ** 0.5
-                    ) * 111000  # Rough conversion to meters
+                    ) * ROUGH_METERS_PER_DEGREE  # Rough conversion to meters
                     velocity = distance_from_previous / time_diff
 
         # Create GPS point
@@ -191,11 +194,11 @@ class FlightTracker:
         self.points_till_backup -= 1
         if self.points_till_backup == 0:
             self._backup_to_database()
-            self.points_till_backup = 100
+            self.points_till_backup = BACKUP_INTERVAL
 
         return is_valid
 
-    def get_recent_track(self, n: int = 50) -> List[GPSPoint]:
+    def get_recent_points(self, n: int = 50) -> List[GPSPoint]:
         """Retrieve most recent GPS points for real-time map display.
 
         Returns the last N GPS points from current flight session, filtered
@@ -211,10 +214,6 @@ class FlightTracker:
 
         Raises:
             ValueError: If n is negative or exceeds reasonable limits
-
-        Note:
-            Only returns validated GPS points suitable for map plotting.
-            Invalid GPS fixes are automatically filtered out.
         """
         if n < 0:
             raise ValueError("n must be non-negative")
@@ -227,7 +226,7 @@ class FlightTracker:
         # Return last n points
         return valid_points[-n:] if len(valid_points) > n else valid_points
 
-    def get_full_track(self, include_invalid: bool = False) -> List[GPSPoint]:
+    def get_full_history(self, include_invalid: bool = False) -> List[GPSPoint]:
         """Retrieve complete GPS track for current flight session.
 
         Returns all GPS points from flight start to present, optionally
@@ -250,7 +249,7 @@ class FlightTracker:
         else:
             return [point for point in self.current_session_points if point.is_valid]
 
-    def start_new_flight(self, flight_notes: str = "") -> bool:
+    def start_new_flight(self, flight_notes: str = "", store_old_invalid: bool = False) -> bool:
         """Begin new flight session and archive current track data.
 
         Saves current flight track to persistent database, resets session
@@ -259,6 +258,7 @@ class FlightTracker:
 
         Args:
             flight_notes: Optional description or metadata for new flight
+            store_old_invalid: Optional bool
 
         Returns:
             True if new flight session started successfully,
@@ -271,7 +271,34 @@ class FlightTracker:
         Note:
             Current flight data is permanently saved before reset.
             Ensure all analysis is complete before calling this method.
+            By default does not store invalid entries.
         """
+        '''
+        if there is already data -> create new entry and store what we got
+        if there isn't already flight data -> create new entry in the db
+        '''
+        if not re.match(r"^[\w -]*$", flight_notes):
+            raise ValueError(
+                "flight_notes may only contain alphanumerics, spaces, hyphens, and underscores"
+            )
+            return False
+        cursor = self.db.cursor()
+        if self.current_session_points and self.current_flight_id:
+            points = self.get_full_history(include_invalid=store_old_invalid)
+            for point in points:
+                packet_record = PacketRecord(
+                    receive_timestamp=point.timestamp,
+                    lora_data=point.lora_data,
+                    raw_packet: str,
+                    packet_sequence: Optional[int] = None,
+                    signal_quality: Optional[Dict[str, float]] = None, # {'rssi': -85, 'snr': 8.5}
+                    validation_errors: List[str] = field(default_factory=list),
+                    ground_station_location: Optional[tuple] = None  # (lat, lon)
+                )
+
+
+
+        else:
         pass
 
     def export_track(self, format: str = "gpx", filename: Optional[str] = None) -> str:
@@ -318,6 +345,7 @@ class FlightTracker:
             Validation criteria include coordinate bounds, signal strength,
             and velocity constraints based on balloon flight characteristics.
         """
+
         # Check coordinate bounds
         if not (-90 <= lora_data.latitude <= 90):
             return False
@@ -331,11 +359,6 @@ class FlightTracker:
         # Check signal quality
         if lora_data.rssi < -120:  # Very weak signal threshold
             return False
-
-        # Additional checks could include:
-        # - Velocity constraints (balloons don't move too fast horizontally)
-        # - Acceleration limits
-        # - Consistency with previous positions
 
         return True
 
@@ -354,15 +377,16 @@ class FlightTracker:
             Private method for crash recovery. Does not affect current
             session data or flight operations if backup fails.
         """
+
         try:
+            # todo:tariq i have this current_flight_id that isnt getting set anywhere
             if not self.current_session_points or not self.current_flight_id:
                 return True  # Nothing to backup
 
             cursor = self.db.cursor()
 
             # Get points that haven't been backed up yet
-            # For simplicity, backup the last 100 points
-            points_to_backup = self.current_session_points[-100:]
+            points_to_backup = self.current_session_points[-BACKUP_INTERVAL:]
 
             for point in points_to_backup:
                 # Create PacketRecord for database storage
