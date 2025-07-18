@@ -207,6 +207,10 @@ class LoraReader(threading.Thread):
 
 
 class LoRaCommandSender:
+    # todo: LeRoy: Make the python side of this method smarter and make the arduino dumber.
+    # todo: LeRoy: Particularly in handling Tx window monitoring.
+    """Prints command string to the serial monitor for the LoRa Arduino to collect and handle."""
+
     def __init__(self, serial_port):
         self.serial_port = serial_port
 
