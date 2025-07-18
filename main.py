@@ -23,12 +23,7 @@ from sun_position import sunpos
 
 # todo: Set up Balloon Command functionality
 
-# todo: Map stuff
-
-# todo: save serial monitor data to a .txt or .csv file (GUI: file --> save sort of thing)
-# todo:tariq starting branch for this now, use todo:[NAME] to help filter for your todos
-# todo:tariq going to implement the backend, and let you build the gui and plug it into
-# todo:tariq a button or a drop-down, however you want to implement it.
+# todo:tariq Map stuff
 
 # todo: calculate distance from balloon
 
