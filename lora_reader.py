@@ -33,17 +33,17 @@ class LoraDataObject:
         accuracy is essential for ground station pointing calculations.
     """
 
-    malformed: bool
-    raw_lora_string: str
-    identifier_one: str
-    latitude: float
-    longitude: float
-    altitude: float
-    last_sent: str
-    last_complete: str
-    identifier_two: str
-    rssi: float
-    snr: float
+    malformed: bool = False
+    raw_lora_string: str = "N/A"
+    identifier_one: str = "N/A"
+    latitude: float = 0.0
+    longitude: float = 0.0
+    altitude: float = 0.0
+    last_sent: str = "N/A"
+    last_complete: str = "N/A"
+    identifier_two: str = "N/A"
+    rssi: float = 0.0
+    snr: float = 0.0
 
 
 class LoraReader(threading.Thread):
@@ -117,7 +117,7 @@ class LoraReader(threading.Thread):
 
         self.is_running = False
 
-    def parse_lora_data(self, line: str) -> Optional[LoraDataObject]:
+    def parse_lora_data(self, line: str) -> LoraDataObject:
         """Parse raw LoRa data string into structured object.
 
         Validates and converts colon-separated data into LoraDataObject.
@@ -132,6 +132,11 @@ class LoraReader(threading.Thread):
         Raises:
             ValueError: On coordinate conversion errors (handled internally)
             IndexError: On insufficient field count (handled internally)
+
+        Notes:
+            Will always return an object. If the fields cannot be parsed,
+            then we return an object with malformed flag set, and the raw_lora_string
+            populated with the malformed string.
         """
 
         # Skip lines with any forbidden characters
@@ -157,6 +162,7 @@ class LoraReader(threading.Thread):
             return LoraDataObject(
                 malformed=malformed,
                 raw_lora_string=line,
+            )
                 
 
         else:
@@ -187,11 +193,17 @@ class LoraReader(threading.Thread):
             except (ValueError, IndexError) as e:
                 print(f"Parsing error: {e} | RAW: {line}")
                 self.window.statusBox.append(f"Parsing error: RAW: {line}")
-                return None
+                return LoraDataObject(
+                    malformed=True,
+                    raw_lora_string=line
+                )
             except Exception as e:
                 print(f"Error parsing LoraData: {e}")
                 self.window.statusBox.append(f"Error parsing LoraData: {e}")
-                return None
+                return LoraDataObject(
+                    malformed=True,
+                    raw_lora_string=line
+                )
 
     @staticmethod
     def convert_to_decimal_degrees(coordinate_string: str) -> float:
