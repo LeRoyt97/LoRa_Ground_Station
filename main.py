@@ -290,7 +290,14 @@ class MainWindow(QMainWindow):
         return
 
     def try_send_command(self, packet: str) -> None:
-        match packet:  # match/case to print readable feedback to statusBox
+        """When command buttons are pushed, call the send_command function in lora_reader and print feedback to the
+        statusBox.
+
+        Args:
+            packet (str): Packet to send over LoRa.
+        """
+
+        match packet:
             case "00000000":
                 self.command = "IDLE"
             case "11111111":
