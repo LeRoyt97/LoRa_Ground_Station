@@ -112,7 +112,7 @@ class MainWindow(QMainWindow):
 
         self.actionSave_Serial.triggered.connect(
             lambda: self.save_serial(
-                f"log_{datetime.datetime.now(tz=datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')}.txt"
+                f"log_{datetime.datetime.now(tz=datetime.timezone.utc).isoformat}.txt"
             )
         )
 
