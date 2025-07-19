@@ -28,9 +28,15 @@ class TrackingMath:
 
     EARTH_RADIUS_METERS = 6371000  # average radius of the earth in meters
 
-    def __init__(self, ground_station_latitude: float, ground_station_longitude: float, 
-                 ground_station_altitude: float, target_latitude: float, 
-                 target_longitude: float, target_altitude: float) -> None:
+    def __init__(
+        self,
+        ground_station_latitude: float,
+        ground_station_longitude: float,
+        ground_station_altitude: float,
+        target_latitude: float,
+        target_longitude: float,
+        target_altitude: float,
+    ) -> None:
         """Initialize tracking calculation parameters.
 
         Converts geographic coordinates to radians and calculates geocentric radii
@@ -39,12 +45,12 @@ class TrackingMath:
 
         Args:
             ground_station_latitude: Ground station latitude in decimal degrees
-            ground_station_longitude: Ground station longitude in decimal degrees  
+            ground_station_longitude: Ground station longitude in decimal degrees
             ground_station_altitude: Ground station altitude above sea level in meters
             target_latitude: Target latitude in decimal degrees
             target_longitude: Target longitude in decimal degrees
             target_altitude: Target altitude above sea level in meters
-            
+
         Note:
             SAFETY CRITICAL: Coordinate accuracy directly affects antenna pointing.
             Invalid coordinates can result in tracking failure or equipment damage
@@ -60,9 +66,15 @@ class TrackingMath:
         self.target_longitude = math.radians(target_longitude)
         self.target_latitude = math.radians(target_latitude)
         self.target_altitude = target_altitude
-        self.target_geocentric_radius = TrackingMath.EARTH_RADIUS_METERS + self.target_altitude # radius of the earth plus altitude of target
-        self.ground_station_geocentric_radius = TrackingMath.EARTH_RADIUS_METERS + self.ground_station_altitude # radius of the earth plus gs altitude
-        self.longitude_difference = self.ground_station_longitude - self.target_longitude
+        self.target_geocentric_radius = (
+            TrackingMath.EARTH_RADIUS_METERS + self.target_altitude
+        )  # radius of the earth plus altitude of target
+        self.ground_station_geocentric_radius = (
+            TrackingMath.EARTH_RADIUS_METERS + self.ground_station_altitude
+        )  # radius of the earth plus gs altitude
+        self.longitude_difference = (
+            self.ground_station_longitude - self.target_longitude
+        )
 
         self.distance = self.distance()
 
@@ -76,10 +88,30 @@ class TrackingMath:
             float: Distance from ground station to target in meters
         """
         # calculates distance from ground station to the balloon (in m)
-        component_a = math.pow((self.target_geocentric_radius*math.cos(self.target_latitude)*math.cos(self.longitude_difference)-self.ground_station_geocentric_radius*math.cos(self.ground_station_latitude)),2)
-        component_b = math.pow(self.target_geocentric_radius,2)*math.pow(math.cos(self.target_latitude),2)*math.pow(math.sin(self.longitude_difference),2)
-        component_c = math.pow((self.target_geocentric_radius*math.sin(self.target_latitude)-self.ground_station_geocentric_radius*math.sin(self.ground_station_latitude)),2)
-        self.distance = math.sqrt(component_a+component_b+component_c)
+        component_a = math.pow(
+            (
+                self.target_geocentric_radius
+                * math.cos(self.target_latitude)
+                * math.cos(self.longitude_difference)
+                - self.ground_station_geocentric_radius
+                * math.cos(self.ground_station_latitude)
+            ),
+            2,
+        )
+        component_b = (
+            math.pow(self.target_geocentric_radius, 2)
+            * math.pow(math.cos(self.target_latitude), 2)
+            * math.pow(math.sin(self.longitude_difference), 2)
+        )
+        component_c = math.pow(
+            (
+                self.target_geocentric_radius * math.sin(self.target_latitude)
+                - self.ground_station_geocentric_radius
+                * math.sin(self.ground_station_latitude)
+            ),
+            2,
+        )
+        self.distance = math.sqrt(component_a + component_b + component_c)
         return self.distance
 
     def elevation(self) -> float:
@@ -90,16 +122,30 @@ class TrackingMath:
 
         Returns:
             float: Elevation angle in degrees (0-90)
-            
+
         Note:
             SAFETY CRITICAL: Controls antenna elevation movement. Values outside
             0-90° range are clamped to prevent mechanical damage. Verify antenna
             physical limits before operation.
         """
         # calculates the elevation from the ground station to the ballon (degrees)
-        component_a = math.cos(self.ground_station_latitude)*self.target_geocentric_radius*math.cos(self.target_latitude)*math.cos(self.longitude_difference)
-        component_b = self.target_geocentric_radius*math.sin(self.ground_station_latitude)*math.sin(self.target_latitude)
-        self.elevation_angle = -math.asin(-((component_a+component_b-self.ground_station_geocentric_radius)/self.distance))
+        component_a = (
+            math.cos(self.ground_station_latitude)
+            * self.target_geocentric_radius
+            * math.cos(self.target_latitude)
+            * math.cos(self.longitude_difference)
+        )
+        component_b = (
+            self.target_geocentric_radius
+            * math.sin(self.ground_station_latitude)
+            * math.sin(self.target_latitude)
+        )
+        self.elevation_angle = -math.asin(
+            -(
+                (component_a + component_b - self.ground_station_geocentric_radius)
+                / self.distance
+            )
+        )
 
         self.elevation_angle = np.rad2deg(self.elevation_angle)
 
@@ -118,16 +164,32 @@ class TrackingMath:
 
         Returns:
             float: Azimuth angle in degrees (0-360)
-            
+
         Note:
             SAFETY CRITICAL: Controls antenna azimuth rotation. Monitor for cable
             wrap and mechanical limits. Continuous rotation may damage RF connections
             or exceed physical rotation constraints.
         """
         # calculates the azimuth from the ground station to the balloon (compass bearing degrees)
-        component_a = -(self.target_geocentric_radius*math.cos(self.target_latitude)*math.sin(self.longitude_difference))/(self.distance*math.cos(np.deg2rad(self.elevation_angle)))
-        component_b = -(self.target_geocentric_radius*((math.sin(self.ground_station_latitude)*math.cos(self.target_latitude)*math.cos(self.longitude_difference))-
-                         (math.cos(self.ground_station_latitude)*math.sin(self.target_latitude))))/(self.distance*math.cos(np.deg2rad(self.elevation_angle)))
+        component_a = -(
+            self.target_geocentric_radius
+            * math.cos(self.target_latitude)
+            * math.sin(self.longitude_difference)
+        ) / (self.distance * math.cos(np.deg2rad(self.elevation_angle)))
+        component_b = -(
+            self.target_geocentric_radius
+            * (
+                (
+                    math.sin(self.ground_station_latitude)
+                    * math.cos(self.target_latitude)
+                    * math.cos(self.longitude_difference)
+                )
+                - (
+                    math.cos(self.ground_station_latitude)
+                    * math.sin(self.target_latitude)
+                )
+            )
+        ) / (self.distance * math.cos(np.deg2rad(self.elevation_angle)))
         self.azimuth_angle = np.rad2deg(math.atan2(component_a, component_b))
 
         while self.azimuth_angle < 0:

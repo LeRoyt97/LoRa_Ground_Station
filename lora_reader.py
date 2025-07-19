@@ -49,7 +49,12 @@ class LoraDataObject:
 
 class LoraReader(threading.Thread):
     def __init__(
-        self, port: str, window, baudrate: int = 115200, callback=None
+        self,
+        port: str,
+        window,
+        baudrate: int = 115200,
+        callback=None,
+        gps_callback=None,
     ) -> None:
         """Initialize LoRa reader thread.
 
@@ -57,6 +62,7 @@ class LoraReader(threading.Thread):
             port: Serial port identifier (e.g., 'COM3', '/dev/ttyUSB0')
             baudrate: Serial communication baud rate, defaults to 115200
             callback: Optional callback object with emit() method for data forwarding
+            gps_callback: Callback to store a GPSPoint
             window: handle to window class
 
         Raises:
@@ -121,7 +127,6 @@ class LoraReader(threading.Thread):
         Sets internal flag to terminate the run() loop. Thread will complete
         current iteration and exit cleanly, closing serial resources.
         """
-
         self.is_running = False
 
     def parse_lora_data(self, line: str) -> LoraDataObject:
@@ -153,7 +158,7 @@ class LoraReader(threading.Thread):
             malformed = True
             # print(
             #     f"Ignored malformed line (bad characters): {line}"
-            # )  
+            # )
             # # todo:leroy make this info more useful. Count lines and calculate % of lines that are bad?
             # self.window.statusBox.append(
             #     f"Ignored malformed line (bad characters): {line}"
@@ -162,7 +167,6 @@ class LoraReader(threading.Thread):
         else:
             malformed = False
 
-
         fields = line.split(":")
         if len(fields) != 9:
             raise IndexError("Raw LoRa data line should contain 9 fields.")
@@ -170,7 +174,6 @@ class LoraReader(threading.Thread):
                 malformed=malformed,
                 raw_lora_string=line,
             )
-                
 
         else:
             try:
@@ -200,17 +203,11 @@ class LoraReader(threading.Thread):
             except (ValueError, IndexError) as e:
                 print(f"Parsing error: {e} | RAW: {line}")
                 self.window.statusBox.append(f"Parsing error: RAW: {line}")
-                return LoraDataObject(
-                    malformed=True,
-                    raw_lora_string=line
-                )
+                return LoraDataObject(malformed=True, raw_lora_string=line)
             except Exception as e:
                 print(f"Error parsing LoraData: {e}")
                 self.window.statusBox.append(f"Error parsing LoraData: {e}")
-                return LoraDataObject(
-                    malformed=True,
-                    raw_lora_string=line
-                )
+                return LoraDataObject(malformed=True, raw_lora_string=line)
 
     @staticmethod
     def convert_to_decimal_degrees(coordinate_string: str) -> float:

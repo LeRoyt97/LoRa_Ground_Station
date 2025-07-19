@@ -9,7 +9,7 @@ from dataclasses import field
 from lora_reader import LoraDataObject
 
 BACKUP_INTERVAL = 100
-ROUGH_METERS_PER_DEGREE = 40075.0 / 360 # circumference ~= 40075 km
+ROUGH_METERS_PER_DEGREE = 40075.0 / 360  # circumference ~= 40075 km
 
 """
 -- Flight sessions
@@ -99,10 +99,10 @@ class FlightTracker:
     """
 
     def __init__(
-        self, 
-        ground_station_coords: dict, 
-        status_box_callback: Optional[Callable[[str], None]] = None, 
-        db_path: str = "flight_data.db"
+        self,
+        ground_station_coords: dict,
+        status_box_callback: Optional[Callable[[str], None]] = None,
+        db_path: str = "flight_data.db",
     ) -> None:
         """Initialize flight tracker with empty session and database connection.
 
@@ -116,9 +116,9 @@ class FlightTracker:
         # Validate ground station coordinates
         if not isinstance(ground_station_coords, dict):
             raise TypeError("ground_station_coords must be a dictionary")
-        if 'lat' not in ground_station_coords or 'lon' not in ground_station_coords:
+        if "lat" not in ground_station_coords or "lon" not in ground_station_coords:
             raise ValueError("ground_station_coords must contain 'lat' and 'lon' keys")
-        
+
         self.ground_station_coords = ground_station_coords
         self.status_callback = status_box_callback
         self.db_path = db_path
@@ -161,7 +161,9 @@ class FlightTracker:
         is_valid = self._validate_gps_point(lora_data)
 
         if not is_valid:
-            raise ValueError(f"The passed LoraDataObject has invalid GPS coordinates.\nLon: {lora_data.longitude}, Lat: {lora_data.latitude}")
+            raise ValueError(
+                f"The passed LoraDataObject has invalid GPS coordinates.\nLon: {lora_data.longitude}, Lat: {lora_data.latitude}"
+            )
 
         # Calculate velocity and distance if we have previous points
         velocity = None
@@ -174,16 +176,18 @@ class FlightTracker:
                     break
 
             if last_valid_point:
-                # Simple velocity calculation 
+                # Simple velocity calculation
                 # todo:tariq enhance with proper geodesic math
                 # todo:tariq like the haversine formula
-                time_diff = ( 
-                    datetime.fromisoformat(timestamp) 
+                time_diff = (
+                    datetime.fromisoformat(timestamp)
                     - datetime.fromisoformat(last_valid_point.timestamp)
                 ).total_seconds()
                 if time_diff > 0:
                     lat_diff = lora_data.latitude - last_valid_point.lora_data.latitude
-                    lon_diff = lora_data.longitude - last_valid_point.lora_data.longitude
+                    lon_diff = (
+                        lora_data.longitude - last_valid_point.lora_data.longitude
+                    )
                     distance_degrees_from_previous = (
                         (lat_diff**2 + lon_diff**2) ** 0.5
                     ) * ROUGH_METERS_PER_DEGREE  # Rough conversion to meters
@@ -261,7 +265,9 @@ class FlightTracker:
         else:
             return [point for point in self.current_session_points if point.is_valid]
 
-    def start_new_flight(self, flight_notes: str = "N/A", store_old_invalid: bool = False) -> bool:
+    def start_new_flight(
+        self, flight_notes: str = "N/A", store_old_invalid: bool = False
+    ) -> bool:
         """Begin new flight session and archive current track data.
 
         Saves current flight track to persistent database, resets session
@@ -298,7 +304,7 @@ class FlightTracker:
                 points = self.get_full_history(include_invalid=store_old_invalid)
                 for point in points:
                     validation_errors = []
-                    if point.lora_data.malformed: 
+                    if point.lora_data.malformed:
                         validation_errors.append("Invalid LoRa String.")
                     elif not self._validate_gps_point(point.lora_data):
                         validation_errors.append("Invalid GPS information.")
@@ -318,7 +324,7 @@ class FlightTracker:
                             point.lora_data.altitude,
                             point.lora_data.rssi,
                             point.lora_data.snr,
-                            json.dumps(validation_errors)
+                            json.dumps(validation_errors),
                         ),
                     )
                 # update the end time of the current flight
@@ -328,10 +334,7 @@ class FlightTracker:
                     SET end_time = ?
                     WHERE flight_id = ?
                     """,
-                    (
-                        datetime.now(timezone.utc).isoformat(),
-                        self.current_flight_id
-                    )
+                    (datetime.now(timezone.utc).isoformat(), self.current_flight_id),
                 )
             # if not currently in a flight
             # create new row in flight
@@ -343,9 +346,9 @@ class FlightTracker:
                 (
                     datetime.now(timezone.utc).isoformat(),
                     flight_notes,
-                    self.ground_station_coords['lat'],
-                    self.ground_station_coords['lon']
-                )
+                    self.ground_station_coords["lat"],
+                    self.ground_station_coords["lon"],
+                ),
             )
             self.current_session_points = []
             self.current_flight_id = cursor.lastrowid
@@ -359,7 +362,9 @@ class FlightTracker:
             return False
 
     def export_track(
-            self, format: str = "gpx", filename: str = datetime.now(timezone.utc).isoformat()
+        self,
+        format: str = "gpx",
+        filename: str = datetime.now(timezone.utc).isoformat(),
     ) -> str:
         """Export current flight track to standard GPS file format.
 
@@ -381,7 +386,7 @@ class FlightTracker:
 
         Format Specifications:
             - GPX: GPS Exchange Format (https://www.topografix.com/gpx.asp)
-            - KML: Keyhole Markup Language (https://developers.google.com/kml/documentation/kmlreference)  
+            - KML: Keyhole Markup Language (https://developers.google.com/kml/documentation/kmlreference)
             - CSV: Comma-Separated Values (https://tools.ietf.org/html/rfc4180)
 
         Note:
@@ -412,20 +417,18 @@ class FlightTracker:
                 self.status_callback(error_msg)
             raise
 
-
-
     def _export_gpx(self, filename: str) -> str:
         """Export GPS track to GPX format.
-        
+
         GPX (GPS Exchange Format) is an XML schema for GPS data exchange.
         Specification: https://www.topografix.com/gpx.asp
-        
+
         Args:
             filename: Output filename (will add .gpx extension if missing)
-            
+
         Returns:
             Full path to exported GPX file
-            
+
         Raises:
             RuntimeError: If no valid GPS data exists to export
             IOError: If error during file opening / writing process
@@ -434,32 +437,32 @@ class FlightTracker:
         valid_points = self.get_full_history(include_invalid=False)
         if not valid_points:
             raise RuntimeError("No valid GPS data exists to export")
-            
+
         # Ensure .gpx extension
-        if not filename.endswith('.gpx'):
-            filename += '.gpx'
-            
+        if not filename.endswith(".gpx"):
+            filename += ".gpx"
+
         # GPX XML structure
-        gpx_content = '''<?xml version="1.0" encoding="UTF-8"?>
+        gpx_content = """<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="LoRa Ground Station" xmlns="http://www.topografix.com/GPX/1/1">
   <trk>
     <name>Balloon Flight Track</name>
     <trkseg>
-'''
-        
+"""
+
         for point in valid_points:
-            gpx_content += f'''      <trkpt lat="{point.lora_data.latitude}" lon="{point.lora_data.longitude}">
+            gpx_content += f"""      <trkpt lat="{point.lora_data.latitude}" lon="{point.lora_data.longitude}">
         <ele>{point.lora_data.altitude}</ele>
         <time>{point.timestamp}</time>
       </trkpt>
-'''
-        
-        gpx_content += '''    </trkseg>
+"""
+
+        gpx_content += """    </trkseg>
   </trk>
-</gpx>'''
-        
+</gpx>"""
+
         try:
-            with open(filename, 'w', encoding='utf-8') as f:
+            with open(filename, "w", encoding="utf-8") as f:
                 f.write(gpx_content)
         except (OSError, UnicodeEncodeError) as err:
             error_msg = f"Cannot write GPX file {filename}: {err}"
@@ -477,29 +480,29 @@ class FlightTracker:
 
     def _export_kml(self, filename: str) -> str:
         """Export GPS track to KML format.
-        
+
         KML (Keyhole Markup Language) is Google Earth's XML format.
         Specification: https://developers.google.com/kml/documentation/kmlreference
-        
+
         Args:
             filename: Output filename (will add .kml extension if missing)
-            
+
         Returns:
             Full path to exported KML file
-            
+
         Raises:
             RuntimeError: If no valid GPS data exists to export
         """
         valid_points = self.get_full_history(include_invalid=False)
         if not valid_points:
             raise RuntimeError("No valid GPS data exists to export")
-            
+
         # Ensure .kml extension
-        if not filename.endswith('.kml'):
-            filename += '.kml'
-            
+        if not filename.endswith(".kml"):
+            filename += ".kml"
+
         # KML XML structure
-        kml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+        kml_content = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>Balloon Flight Track</name>
@@ -510,20 +513,20 @@ class FlightTracker:
         <tessellate>1</tessellate>
         <altitudeMode>absolute</altitudeMode>
         <coordinates>
-'''
-        
+"""
+
         # KML coordinates format: lon,lat,alt (note: lon first!)
         for point in valid_points:
-            kml_content += f'          {point.lora_data.longitude},{point.lora_data.latitude},{point.lora_data.altitude}\n'
-        
-        kml_content += '''        </coordinates>
+            kml_content += f"          {point.lora_data.longitude},{point.lora_data.latitude},{point.lora_data.altitude}\n"
+
+        kml_content += """        </coordinates>
       </LineString>
     </Placemark>
   </Document>
-</kml>'''
-        
+</kml>"""
+
         try:
-            with open(filename, 'w', encoding='utf-8') as f:
+            with open(filename, "w", encoding="utf-8") as f:
                 f.write(kml_content)
         except (OSError, UnicodeEncodeError) as err:
             error_msg = f"Cannot write KML file {filename}: {err}"
@@ -536,40 +539,40 @@ class FlightTracker:
                 self.status_callback(error_msg)
             print(error_msg)
             raise
-            
+
         return os.path.abspath(filename)
 
     def _export_csv(self, filename: str) -> str:
         """Export GPS track to CSV format.
-        
+
         CSV format with headers for spreadsheet analysis.
         RFC 4180 compliant: https://tools.ietf.org/html/rfc4180
-        
+
         Args:
             filename: Output filename (will add .csv extension if missing)
-            
+
         Returns:
             Full path to exported CSV file
-            
+
         Raises:
             RuntimeError: If no valid GPS data exists to export
         """
         valid_points = self.get_full_history(include_invalid=False)
         if not valid_points:
             raise RuntimeError("No valid GPS data exists to export")
-            
+
         # Ensure .csv extension
-        if not filename.endswith('.csv'):
-            filename += '.csv'
-            
+        if not filename.endswith(".csv"):
+            filename += ".csv"
+
         # CSV headers and data
         csv_content = "timestamp,latitude,longitude,altitude,rssi,snr,velocity,distance_from_previous\n"
-        
+
         for point in valid_points:
             csv_content += f'"{point.timestamp}",{point.lora_data.latitude},{point.lora_data.longitude},{point.lora_data.altitude},{point.lora_data.rssi},{point.lora_data.snr},{point.velocity or ""},{point.distance_from_previous or ""}\n'
-        
+
         try:
-            with open(filename, 'w', encoding='utf-8') as f:
+            with open(filename, "w", encoding="utf-8") as f:
                 f.write(csv_content)
         except (OSError, UnicodeEncodeError) as err:
             error_msg = f"Cannot write CSV file {filename}: {err}"
@@ -582,7 +585,7 @@ class FlightTracker:
                 self.status_callback(error_msg)
             print(error_msg)
             raise
-            
+
         return os.path.abspath(filename)
 
     def _validate_gps_point(self, lora_data: LoraDataObject) -> bool:
@@ -654,11 +657,14 @@ class FlightTracker:
                 # Skip invalid points if include_invalid is False
                 if not include_invalid and not point.is_valid:
                     continue
-                    
+
                 # Create PacketRecord for database storage
                 packet_record = PacketRecord(
                     gps_point=point,
-                    signal_quality={"rssi": point.lora_data.rssi, "snr": point.lora_data.snr},
+                    signal_quality={
+                        "rssi": point.lora_data.rssi,
+                        "snr": point.lora_data.snr,
+                    },
                     validation_errors=(
                         [] if point.is_valid else ["GPS validation failed"]
                     ),

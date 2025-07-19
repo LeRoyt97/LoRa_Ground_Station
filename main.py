@@ -45,14 +45,14 @@ class MainWindow(QMainWindow):
         # === Hardware Interfaces and Threads ===
         self.flight_tracker = FlightTracker(
             ground_station_coords={
-                'lat': self.ground_station_latitude,
-                'lon': self.ground_station_longitude
+                "lat": self.ground_station_latitude,
+                "lon": self.ground_station_longitude,
             },
-            status_box_callback=status_box_callback
+            status_box_callback=status_box_callback,
         )
-        self.reader = None
+        self.reader: LoraReader = None
         self.lora_command_sender = None
-        self.ground_station_arduino = None
+        self.ground_station_arduino: GroundStationArduino = None
         self.track_thread = None
         self.worker: Worker = None
 
@@ -141,7 +141,7 @@ class MainWindow(QMainWindow):
             if target == "lora" and self.reader:
                 self.is_lora_listening = False
                 self.reader.stop()
-                self.reader.join()
+                self.reader.join(timeout=5.0)
                 if self.reader.serial_port.is_open:
                     self.reader.serial_port.close()
                 self.reader = None
@@ -178,7 +178,10 @@ class MainWindow(QMainWindow):
             self.statusBox.setPlainText(f"LoRa Connecting to {selected_port}")
             try:
                 self.reader = LoraReader(
-                    port=selected_port, window=self, callback=self.log_signal
+                    port=selected_port,
+                    window=self,
+                    callback=self.log_signal,
+                    gps_callback=self.flight_tracker.add_gps_point,
                 )
                 self.reader.start()
                 self.is_lora_listening = True
@@ -623,16 +626,15 @@ class MainWindow(QMainWindow):
         """
         # sets up the qt thread to start tracking, and starts the thread
         try:
-            self.is_tracking = True
             self.statusBox.append("Tracking!")
             self.track_thread = QThread()
             self.worker = Worker(
                 self.reader,
                 {
-                    'lat': self.ground_station_latitude,
-                    'lon': self.ground_station_longitude,
-                    'alt': self.ground_station_altitude,
-                }
+                    "lat": self.ground_station_latitude,
+                    "lon": self.ground_station_longitude,
+                    "alt": self.ground_station_altitude,
+                },
             )
 
             self.worker.moveToThread(self.track_thread)
@@ -666,12 +668,12 @@ class MainWindow(QMainWindow):
         self.is_tracking = True
         self.track_thread = QThread()
         self.worker = Worker(
-            self.reader, 
+            self.reader,
             {
-                'lat': self.ground_station_latitude,
-                'lon': self.ground_station_longitude,
-                'alt': self.ground_station_altitude,
-            }
+                "lat": self.ground_station_latitude,
+                "lon": self.ground_station_longitude,
+                "alt": self.ground_station_altitude,
+            },
         )
 
         self.worker.moveToThread(self.track_thread)
@@ -805,9 +807,12 @@ class Worker(QObject):
 
         if not isinstance(lora_reader, LoraReader):
             raise TypeError("lora_reader must be of type LoraReader")
-        if not isinstance(ground_station_coords, dict) \
-            or not all(key in ground_station_coords for key in ['lat', 'lon', 'alt']):
-            raise TypeError("ground_station_coords must be a Dict, and have attributes: lat, long, alt")
+        if not isinstance(ground_station_coords, dict) or not all(
+            key in ground_station_coords for key in ["lat", "lon", "alt"]
+        ):
+            raise TypeError(
+                "ground_station_coords must be a Dict, and have attributes: lat, long, alt"
+            )
 
         self.should_go = True
         self.reader = lora_reader
@@ -854,9 +859,9 @@ class Worker(QObject):
                     else:
                         # note that TrackingMath takes arguments as lat, long, altitude
                         tracking_calculation = TrackingMath(
-                            self.ground_station_coords['lat'],
-                            self.ground_station_coords['lon'],
-                            self.ground_station_coords['alt'],
+                            self.ground_station_coords["lat"],
+                            self.ground_station_coords["lon"],
+                            self.ground_station_coords["alt"],
                             *balloon_coordinates,
                         )
 
@@ -920,9 +925,9 @@ class Worker(QObject):
         with self.reader.data_lock:
             requested_dict = self.reader.access_lora_data()
             newest_location = [
-                requested_dict['lat'],
-                requested_dict['lon'],
-                requested_dict['alt'],
+                requested_dict["lat"],
+                requested_dict["lon"],
+                requested_dict["alt"],
             ]
             old_location = copy.deepcopy(newest_location)
             prediction_step = 1
@@ -941,10 +946,10 @@ class Worker(QObject):
 
                 with self.reader.data_lock:
                     current_lora_obj = self.reader.access_lora_data()
-                current_data = [ 
-                    current_lora_obj.latitude, 
+                current_data = [
+                    current_lora_obj.latitude,
                     current_lora_obj.longitude,
-                    current_lora_obj.altitude, 
+                    current_lora_obj.altitude,
                 ]
 
                 if newest_location == current_data:
@@ -957,9 +962,9 @@ class Worker(QObject):
                     altitude_step = (newest_location[2] - old_location[2]) / time_delta
 
                     tracking_calculation = TrackingMath(
-                        self.ground_station_coords['lat'],
-                        self.ground_station_coords['lon'],
-                        self.ground_station_coords['alt'],
+                        self.ground_station_coords["lat"],
+                        self.ground_station_coords["lon"],
+                        self.ground_station_coords["alt"],
                         newest_location[1] + (prediction_step * longitude_step),
                         newest_location[0] + (prediction_step * latitude_step),
                         newest_location[2] + (prediction_step * altitude_step),
