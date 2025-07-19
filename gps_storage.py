@@ -290,70 +290,66 @@ class FlightTracker:
                 "flight_notes may only contain alphanumerics, spaces, hyphens, and underscores"
             )
 
-        cursor = self.db.cursor()
-        # check if we need to store previous flight data
-        if self.current_session_points and self.current_flight_id:
-            # Store the old session data into database
-            points = self.get_full_history(include_invalid=store_old_invalid)
-            for point in points:
-                validation_errors = []
-                if point.lora_data.malformed: 
-                    validation_errors.append("Invalid LoRa String.")
-                elif not self._validate_gps_point(point.lora_data):
-                    validation_errors.append("Invalid GPS information.")
+        try:
+            cursor = self.db.cursor()
+            # check if we need to store previous flight data
+            if self.current_session_points and self.current_flight_id:
+                # Store the old session data into database
+                points = self.get_full_history(include_invalid=store_old_invalid)
+                for point in points:
+                    validation_errors = []
+                    if point.lora_data.malformed: 
+                        validation_errors.append("Invalid LoRa String.")
+                    elif not self._validate_gps_point(point.lora_data):
+                        validation_errors.append("Invalid GPS information.")
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO packet_records 
+                        (flight_id, receive_timestamp, raw_packet, latitude, longitude, 
+                         altitude, rssi, snr, validation_errors)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            self.current_flight_id,
+                            point.timestamp,
+                            point.lora_data.raw_lora_string,
+                            point.lora_data.latitude,
+                            point.lora_data.longitude,
+                            point.lora_data.altitude,
+                            point.lora_data.rssi,
+                            point.lora_data.snr,
+                            json.dumps(validation_errors)
+                        ),
+                    )
+                # update the end time of the current flight
                 cursor.execute(
                     """
-                    INSERT OR REPLACE INTO packet_records 
-                    (flight_id, receive_timestamp, raw_packet, latitude, longitude, 
-                     altitude, rssi, snr, validation_errors)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    UPDATE flights
+                    SET end_time = ?
+                    WHERE flight_id = ?
                     """,
                     (
-                        self.current_flight_id,
-                        point.timestamp,
-                        point.lora_data.raw_lora_string,
-                        point.lora_data.latitude,
-                        point.lora_data.longitude,
-                        point.lora_data.altitude,
-                        point.lora_data.rssi,
-                        point.lora_data.snr,
-                        json.dumps(validation_errors)
-                    ),
+                        datetime.now(timezone.utc).isoformat(),
+                        self.current_flight_id
+                    )
                 )
-            # update the end time of the current flight
+            # if not currently in a flight
+            # create new row in flight
             cursor.execute(
                 """
-                UPDATE flights
-                SET end_time = ?
-                WHERE flight_id = ?
+                INSERT INTO flights (start_time, notes, ground_station_lat, ground_station_lon)
+                VALUES (?, ?, ?, ?)
                 """,
                 (
                     datetime.now(timezone.utc).isoformat(),
-                    self.current_flight_id
+                    flight_notes,
+                    self.ground_station_coords['lat'],
+                    self.ground_station_coords['lon']
                 )
             )
+            self.current_session_points = []
+            self.current_flight_id = cursor.lastrowid
             self.db.commit()
-        # if not currently in a flight
-        # create new row in flight
-        cursor.execute(
-            """
-            INSERT INTO flights (start_time, notes, ground_station_lat, ground_station_lon)
-            VALUES (?, ?, ?, ?)
-            """,
-            (
-                datetime.now(timezone.utc).isoformat(),
-                flight_notes,
-                self.ground_station_coords['lat'],
-                self.ground_station_coords['lon']
-            )
-        )
-        self.current_session_points = []
-        self.current_flight_id = cursor.lastrowid
-        self.db.commit()
-
-
-
-
             return True
         except sqlite3.Error as err:
             error_msg = f"Database error during flight start: {err}"

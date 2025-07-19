@@ -1,10 +1,12 @@
 from lora_reader import LoRaCommandSender
+from gps_storage import FlightTracker
 import csv
 import datetime
 import os
 import re
 import sys
 import time
+import copy
 
 import serial
 import serial.tools.list_ports
@@ -41,11 +43,18 @@ class MainWindow(QMainWindow):
         loadUi("LoRa_Designer.ui", self)
 
         # === Hardware Interfaces and Threads ===
+        self.flight_tracker = FlightTracker(
+            ground_station_coords={
+                'lat': self.ground_station_latitude,
+                'lon': self.ground_station_longitude
+            },
+            status_box_callback=status_box_callback
+        )
         self.reader = None
         self.lora_command_sender = None
         self.ground_station_arduino = None
         self.track_thread = None
-        self.worker = None
+        self.worker: Worker = None
 
         # === Serial Port Management ===
         self.ports = None
