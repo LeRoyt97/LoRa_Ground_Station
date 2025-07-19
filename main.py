@@ -626,7 +626,14 @@ class MainWindow(QMainWindow):
             self.is_tracking = True
             self.statusBox.append("Tracking!")
             self.track_thread = QThread()
-            self.worker = Worker(self.reader)
+            self.worker = Worker(
+                self.reader,
+                {
+                    'lat': self.ground_station_latitude,
+                    'lon': self.ground_station_longitude,
+                    'alt': self.ground_station_altitude,
+                }
+            )
 
             self.worker.moveToThread(self.track_thread)
 
@@ -658,7 +665,14 @@ class MainWindow(QMainWindow):
         print("In predict_track call")
         self.is_tracking = True
         self.track_thread = QThread()
-        self.worker = Worker(self.reader)
+        self.worker = Worker(
+            self.reader, 
+            {
+                'lat': self.ground_station_latitude,
+                'lon': self.ground_station_longitude,
+                'alt': self.ground_station_altitude,
+            }
+        )
 
         self.worker.moveToThread(self.track_thread)
 
@@ -681,13 +695,11 @@ class MainWindow(QMainWindow):
     def stop_tracking(self) -> None:
         """Stop current tracking operation and reset UI controls."""
         # this stops the tracking thread, thus stopping the tracking
-        if self.is_tracking:
-            self.is_tracking = False
-            self.is_predicting_track = False
-            self.startButton.setEnabled(True)
-            self.predictionStartButton.setEnabled(True)
-            self.setStartingPosButton.setEnabled(True)
-            self.statusBox.append("tracking stopped")
+        self.worker.stop()
+        self.startButton.setEnabled(True)
+        self.predictionStartButton.setEnabled(True)
+        self.setStartingPosButton.setEnabled(True)
+        self.statusBox.append("tracking stopped")
         return
 
     def emergency_stop(self) -> None:
@@ -730,7 +742,7 @@ class MainWindow(QMainWindow):
         """
         if self.reader:
             self.reader.stop()
-            self.reader.join()
+            self.reader.join(timeout=5.0)
         event.accept()
 
     def clear_serial(self) -> None:
@@ -780,14 +792,28 @@ class Worker(QObject):
     finished = pyqtSignal()
     calculation_signal = pyqtSignal(float, float, float)
 
-    def __init__(self, lora_reader) -> None:
+    def __init__(self, lora_reader: LoraReader, ground_station_coords: Dict) -> None:
         """Initialize worker thread for tracking operations.
 
         Args:
             lora_reader: LoRa reader instance for data reception
+
+        Raises:
+            TypeError: Must pass LoraReader type.
         """
         super().__init__()
+
+        if not isinstance(lora_reader, LoraReader):
+            raise TypeError("lora_reader must be of type LoraReader")
+        if not isinstance(ground_station_coords, dict) \
+            or not all(key in ground_station_coords for key in ['lat', 'lon', 'alt']):
+            raise TypeError("ground_station_coords must be a Dict, and have attributes: lat, long, alt")
+
+        self.should_go = True
         self.reader = lora_reader
+        self.ground_station_coords = ground_station_coords
+        # self.reader_lock = threading.Lock()
+
         self.iteration_count = 0
 
     def track(self) -> None:
@@ -805,28 +831,32 @@ class Worker(QObject):
         # if a new position has been found, calculate the azimuth and elevation to point at the new location
         # send the motors a command to move to the new position
 
-        print("LoRa data:", self.reader.data)
-        print("ground_station_arduino:", main_window.ground_station_arduino)
+        # print("LoRa data:", self.reader.data)
+        # print("ground_station_arduino:", main_window.ground_station_arduino)
 
         timer = time.time() - 4.0
         try:
-            while main_window.is_tracking:
-
+            while self.should_go:
                 if (time.time() - timer) > 5.0:
                     timer = time.time()
-                    balloon_coordinates = [
-                        self.reader.data.latitude,
-                        self.reader.data.longitude,
-                        self.reader.data.altitude,
-                    ]
+                    balloon_coordinates = None
+                    with self.reader.data_lock:
+                        requested_data = self.reader.access_lora_data()
+                    if requested_data:
+                        balloon_coordinates = [
+                            requested_data.latitude,
+                            requested_data.longitude,
+                            requested_data.altitude,
+                        ]
+
                     if not balloon_coordinates:
                         pass
                     else:
                         # note that TrackingMath takes arguments as lat, long, altitude
                         tracking_calculation = TrackingMath(
-                            main_window.ground_station_latitude,
-                            main_window.ground_station_longitude,
-                            main_window.ground_station_altitude,
+                            self.ground_station_coords['lat'],
+                            self.ground_station_coords['lon'],
+                            self.ground_station_coords['alt'],
                             *balloon_coordinates,
                         )
 
@@ -887,17 +917,15 @@ class Worker(QObject):
         print("In predict_track")
 
         timer = time.time()
-        newest_location = [
-            self.reader.data.latitude,
-            self.reader.data.longitude,
-            self.reader.data.altitude,
-        ]
-        old_location = [
-            self.reader.data.latitude,
-            self.reader.data.longitude,
-            self.reader.data.altitude,
-        ]
-        prediction_step = 1
+        with self.reader.data_lock:
+            requested_dict = self.reader.access_lora_data()
+            newest_location = [
+                requested_dict['lat'],
+                requested_dict['lon'],
+                requested_dict['alt'],
+            ]
+            old_location = copy.deepcopy(newest_location)
+            prediction_step = 1
 
         calculations = open("predictedOutput.csv", "w")
         csv_writer = csv.writer(calculations)
@@ -907,13 +935,16 @@ class Worker(QObject):
         azimuth_list = []
         elevation_list = []
 
-        while main_window.is_predicting_track:
+        while self.should_go:
             if (time.time() - timer) > 1:
                 timer = time.time()
-                current_data = [
-                    self.reader.data.latitude,
-                    self.reader.data.longitude,
-                    self.reader.data.altitude,
+
+                with self.reader.data_lock:
+                    current_lora_obj = self.reader.access_lora_data()
+                current_data = [ 
+                    current_lora_obj.latitude, 
+                    current_lora_obj.longitude,
+                    current_lora_obj.altitude, 
                 ]
 
                 if newest_location == current_data:
@@ -926,9 +957,9 @@ class Worker(QObject):
                     altitude_step = (newest_location[2] - old_location[2]) / time_delta
 
                     tracking_calculation = TrackingMath(
-                        main_window.ground_station_latitude,
-                        main_window.ground_station_longitude,
-                        main_window.ground_station_altitude,
+                        self.ground_station_coords['lat'],
+                        self.ground_station_coords['lon'],
+                        self.ground_station_coords['alt'],
                         newest_location[1] + (prediction_step * longitude_step),
                         newest_location[0] + (prediction_step * latitude_step),
                         newest_location[2] + (prediction_step * altitude_step),
@@ -1010,6 +1041,9 @@ class Worker(QObject):
         calculations.close()
         self.finished.emit()
         return
+
+    def stop(self) -> None:
+        self.should_go = False
 
 
 if __name__ == "__main__":

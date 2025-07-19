@@ -1,3 +1,4 @@
+import copy
 import dataclasses
 import re
 from difflib import Match
@@ -68,10 +69,11 @@ class LoraReader(threading.Thread):
 
         super().__init__()
         self.window = window
-        self.data = None
+        self.data_lock = threading.Lock()
+        self.data: LoraDataObject = None
         self.serial_port = serial.Serial(port=port, baudrate=baudrate, timeout=1)
         self.callback = callback
-        self.is_running = True
+        self.is_running: Bool = True
 
     def run(self) -> None:
         """Main thread execution loop for continuous LoRa data reception.
@@ -95,7 +97,8 @@ class LoraReader(threading.Thread):
                     )
                     if line:
                         print(line)
-                        self.data = self.parse_lora_data(line)
+                        with self.data_lock:
+                            self.data = self.parse_lora_data(line)
                         if self.callback:
                             self.callback.emit(line)
         except serial.SerialException as e:
@@ -107,6 +110,10 @@ class LoraReader(threading.Thread):
             if "serial_connection" in locals() and self.serial_port.is_open:
                 self.serial_port.close()
                 print("Serial Port closed")
+
+    def access_lora_data(self) -> LoraDataObject:
+        with self.data_lock:
+            return copy.deepcopy(self.data)
 
     def stop(self) -> None:
         """Signal thread to stop execution gracefully.
