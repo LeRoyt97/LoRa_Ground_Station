@@ -116,6 +116,9 @@ class MainWindow(QMainWindow):
             )
         )
 
+    def status_box_callback(message: str) -> None:
+        self.statusBox.append(message)
+
     def refresh_ports(self, combo_box, port_names_list: list, target: str) -> None:
         """Refresh available serial ports in combo box.
 

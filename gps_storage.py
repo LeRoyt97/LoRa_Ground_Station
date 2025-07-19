@@ -98,7 +98,12 @@ class FlightTracker:
     flight session management, and track export functionality.
     """
 
-    def __init__(self, ground_station_coords: dict, db_path: str = "flight_data.db") -> None:
+    def __init__(
+        self, 
+        ground_station_coords: dict, 
+        status_box_callback: Optional[Callable[[str], None]] = None, 
+        db_path: str = "flight_data.db"
+    ) -> None:
         """Initialize flight tracker with empty session and database connection.
 
         Creates new flight session storage and establishes connection to
@@ -115,6 +120,7 @@ class FlightTracker:
             raise ValueError("ground_station_coords must contain 'lat' and 'lon' keys")
         
         self.ground_station_coords = ground_station_coords
+        self.status_callback = status_box_callback
         self.db_path = db_path
         self.points_till_backup = BACKUP_INTERVAL
         self.db = self._initialize_database()
@@ -348,8 +354,17 @@ class FlightTracker:
 
 
 
+            return True
+        except sqlite3.Error as err:
+            error_msg = f"Database error during flight start: {err}"
+            if self.status_callback:
+                self.status_callback(error_msg)
+            print(error_msg)
+            return False
 
-    def export_track(self, format: str = "gpx", filename: Optional[str] = None) -> str:
+    def export_track(
+            self, format: str = "gpx", filename: str = datetime.now(timezone.utc).isoformat()
+    ) -> str:
         """Export current flight track to standard GPS file format.
 
         Converts current flight session to industry-standard GPS formats
@@ -368,11 +383,211 @@ class FlightTracker:
             IOError: If file cannot be written to specified location
             RuntimeError: If no GPS data exists to export
 
+        Format Specifications:
+            - GPX: GPS Exchange Format (https://www.topografix.com/gpx.asp)
+            - KML: Keyhole Markup Language (https://developers.google.com/kml/documentation/kmlreference)  
+            - CSV: Comma-Separated Values (https://tools.ietf.org/html/rfc4180)
+
         Note:
             GPX format is recommended for compatibility with most GPS software.
-            Only exports validated GPS points unless format supports metadata.
+            Only exports validated GPS points. Invalid points are excluded.
         """
-        pass
+        formats = ["gpx", "kml", "csv"]
+        try:
+            match format:
+                case "gpx":
+                    return self._export_gpx(filename)
+                case "kml":
+                    return self._export_kml(filename)
+                case "csv":
+                    return self._export_csv(filename)
+                case _:
+                    raise ValueError(
+                        f"Unsupported format '{format}'. Supported formats: {formats}."
+                    )
+        except IOError as err:
+            error_msg = f"Failed to write GPS export file: {err}"
+            if self.status_callback:
+                self.status_callback(error_msg)
+            raise IOError(error_msg)
+        except RuntimeError as err:
+            error_msg = f"Export failed: {str(err)}"
+            if self.status_callback:
+                self.status_callback(error_msg)
+            raise
+
+
+
+    def _export_gpx(self, filename: str) -> str:
+        """Export GPS track to GPX format.
+        
+        GPX (GPS Exchange Format) is an XML schema for GPS data exchange.
+        Specification: https://www.topografix.com/gpx.asp
+        
+        Args:
+            filename: Output filename (will add .gpx extension if missing)
+            
+        Returns:
+            Full path to exported GPX file
+            
+        Raises:
+            RuntimeError: If no valid GPS data exists to export
+            IOError: If error during file opening / writing process
+            ValueError: Must be UTF-8
+        """
+        valid_points = self.get_full_history(include_invalid=False)
+        if not valid_points:
+            raise RuntimeError("No valid GPS data exists to export")
+            
+        # Ensure .gpx extension
+        if not filename.endswith('.gpx'):
+            filename += '.gpx'
+            
+        # GPX XML structure
+        gpx_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="LoRa Ground Station" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>Balloon Flight Track</name>
+    <trkseg>
+'''
+        
+        for point in valid_points:
+            gpx_content += f'''      <trkpt lat="{point.lora_data.latitude}" lon="{point.lora_data.longitude}">
+        <ele>{point.lora_data.altitude}</ele>
+        <time>{point.timestamp}</time>
+      </trkpt>
+'''
+        
+        gpx_content += '''    </trkseg>
+  </trk>
+</gpx>'''
+        
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(gpx_content)
+        except (OSError, UnicodeEncodeError) as err:
+            error_msg = f"Cannot write GPX file {filename}: {err}"
+            if self.status_callback:
+                self.status_callback(error_msg)
+            raise IOError(error_msg)
+        except Exception as err:
+            error_msg = f"Unexpected error writing GPX file {filename}: {err}"
+            if self.status_callback:
+                self.status_callback(error_msg)
+            print(error_msg)
+            raise
+
+        return os.path.abspath(filename)
+
+    def _export_kml(self, filename: str) -> str:
+        """Export GPS track to KML format.
+        
+        KML (Keyhole Markup Language) is Google Earth's XML format.
+        Specification: https://developers.google.com/kml/documentation/kmlreference
+        
+        Args:
+            filename: Output filename (will add .kml extension if missing)
+            
+        Returns:
+            Full path to exported KML file
+            
+        Raises:
+            RuntimeError: If no valid GPS data exists to export
+        """
+        valid_points = self.get_full_history(include_invalid=False)
+        if not valid_points:
+            raise RuntimeError("No valid GPS data exists to export")
+            
+        # Ensure .kml extension
+        if not filename.endswith('.kml'):
+            filename += '.kml'
+            
+        # KML XML structure
+        kml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Balloon Flight Track</name>
+    <Placemark>
+      <name>Flight Path</name>
+      <LineString>
+        <extrude>1</extrude>
+        <tessellate>1</tessellate>
+        <altitudeMode>absolute</altitudeMode>
+        <coordinates>
+'''
+        
+        # KML coordinates format: lon,lat,alt (note: lon first!)
+        for point in valid_points:
+            kml_content += f'          {point.lora_data.longitude},{point.lora_data.latitude},{point.lora_data.altitude}\n'
+        
+        kml_content += '''        </coordinates>
+      </LineString>
+    </Placemark>
+  </Document>
+</kml>'''
+        
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(kml_content)
+        except (OSError, UnicodeEncodeError) as err:
+            error_msg = f"Cannot write KML file {filename}: {err}"
+            if self.status_callback:
+                self.status_callback(error_msg)
+            raise IOError(error_msg)
+        except Exception as err:
+            error_msg = f"Unexpected error writing KML file {filename}: {err}"
+            if self.status_callback:
+                self.status_callback(error_msg)
+            print(error_msg)
+            raise
+            
+        return os.path.abspath(filename)
+
+    def _export_csv(self, filename: str) -> str:
+        """Export GPS track to CSV format.
+        
+        CSV format with headers for spreadsheet analysis.
+        RFC 4180 compliant: https://tools.ietf.org/html/rfc4180
+        
+        Args:
+            filename: Output filename (will add .csv extension if missing)
+            
+        Returns:
+            Full path to exported CSV file
+            
+        Raises:
+            RuntimeError: If no valid GPS data exists to export
+        """
+        valid_points = self.get_full_history(include_invalid=False)
+        if not valid_points:
+            raise RuntimeError("No valid GPS data exists to export")
+            
+        # Ensure .csv extension
+        if not filename.endswith('.csv'):
+            filename += '.csv'
+            
+        # CSV headers and data
+        csv_content = "timestamp,latitude,longitude,altitude,rssi,snr,velocity,distance_from_previous\n"
+        
+        for point in valid_points:
+            csv_content += f'"{point.timestamp}",{point.lora_data.latitude},{point.lora_data.longitude},{point.lora_data.altitude},{point.lora_data.rssi},{point.lora_data.snr},{point.velocity or ""},{point.distance_from_previous or ""}\n'
+        
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(csv_content)
+        except (OSError, UnicodeEncodeError) as err:
+            error_msg = f"Cannot write CSV file {filename}: {err}"
+            if self.status_callback:
+                self.status_callback(error_msg)
+            raise IOError(error_msg)
+        except Exception as err:
+            error_msg = f"Unexpected error writing CSV file {filename}: {err}"
+            if self.status_callback:
+                self.status_callback(error_msg)
+            print(error_msg)
+            raise
+            
+        return os.path.abspath(filename)
 
     def _validate_gps_point(self, lora_data: LoraDataObject) -> bool:
         """Validate GPS coordinates and signal quality metrics.
