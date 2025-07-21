@@ -434,6 +434,8 @@ class FlightTracker:
             IOError: If error during file opening / writing process
             ValueError: Must be UTF-8
         """
+        # todo:tariq i feel like have template files that we copy and modify are a better approach
+        #            than building these string literals...
         valid_points = self.get_full_history(include_invalid=False)
         if not valid_points:
             raise RuntimeError("No valid GPS data exists to export")
