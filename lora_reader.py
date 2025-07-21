@@ -105,7 +105,9 @@ class LoraReader(threading.Thread):
                 self.serial_port.close()
                 print("Serial Port closed")
 
-    def access_lora_data(self):
+    def access_lora_data(self) -> LoraDataObject:
+        """Returns a deepcopy."""
+
         with self.data_lock:
             return copy.deepcopy(self.data)
 
