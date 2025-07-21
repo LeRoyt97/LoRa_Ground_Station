@@ -63,7 +63,6 @@ class MainWindow(QMainWindow):
         self.is_ground_station_location_set = False
         self.is_lora_listening = False
         self.is_predicting_track = False
-        self.is_tracking = False
 
         # === Ground Station Parameters ===
         self.GroundStationArduino = None
@@ -616,7 +615,6 @@ class MainWindow(QMainWindow):
         """
         # sets up the qt thread to start tracking, and starts the thread
         try:
-            self.is_tracking = True
             self.statusBox.append("Tracking!")
             self.track_thread = QThread()
             self.worker = Worker(self.reader)
@@ -649,7 +647,6 @@ class MainWindow(QMainWindow):
         # sets up the qt thread to start tracking with predictions and starts the thread
         self.statusBox.append("Tracking with predictions!")
         print("In predict_track call")
-        self.is_tracking = True
         self.track_thread = QThread()
         self.worker = Worker(self.reader)
 
@@ -674,13 +671,14 @@ class MainWindow(QMainWindow):
     def stop_tracking(self) -> None:
         """Stop current tracking operation and reset UI controls."""
         # this stops the tracking thread, thus stopping the tracking
-        if self.is_tracking:
-            self.is_tracking = False
-            self.is_predicting_track = False
-            self.startButton.setEnabled(True)
-            self.predictionStartButton.setEnabled(True)
-            self.setStartingPosButton.setEnabled(True)
-            self.statusBox.append("tracking stopped")
+        if self.worker:
+            self.worker.stop()
+        
+        self.is_predicting_track = False
+        self.startButton.setEnabled(True)
+        self.predictionStartButton.setEnabled(True)
+        self.setStartingPosButton.setEnabled(True)
+        self.statusBox.append("tracking stopped")
         return
 
     def emergency_stop(self) -> None:
@@ -723,7 +721,7 @@ class MainWindow(QMainWindow):
         """
         if self.reader:
             self.reader.stop()
-            self.reader.join()
+            self.reader.join(timeout=5.0)
         event.accept()
 
     def clear_serial(self) -> None:
@@ -780,6 +778,7 @@ class Worker(QObject):
             lora_reader: LoRa reader instance for data reception
         """
         super().__init__()
+        self.should_go = True
         self.reader = lora_reader
         self.iteration_count = 0
 
@@ -803,15 +802,17 @@ class Worker(QObject):
 
         timer = time.time() - 4.0
         try:
-            while main_window.is_tracking:
+            while self.should_go:
 
                 if (time.time() - timer) > 5.0:
                     timer = time.time()
-                    balloon_coordinates = [
-                        self.reader.data.latitude,
-                        self.reader.data.longitude,
-                        self.reader.data.altitude,
-                    ]
+                    safe_data = self.reader.access_lora_data()
+                    if safe_data:
+                        balloon_coordinates = [
+                            safe_data.latitude,
+                            safe_data.longitude,
+                            safe_data.altitude,
+                        ]
                     if not balloon_coordinates:
                         pass
                     else:
@@ -880,16 +881,18 @@ class Worker(QObject):
         print("In predict_track")
 
         timer = time.time()
-        newest_location = [
-            self.reader.data.latitude,
-            self.reader.data.longitude,
-            self.reader.data.altitude,
-        ]
-        old_location = [
-            self.reader.data.latitude,
-            self.reader.data.longitude,
-            self.reader.data.altitude,
-        ]
+        safe_initial_data = self.reader.access_lora_data()
+        if safe_initial_data:
+            newest_location = [
+                safe_initial_data.latitude,
+                safe_initial_data.longitude,
+                safe_initial_data.altitude,
+            ]
+            old_location = [
+                safe_initial_data.latitude,
+                safe_initial_data.longitude,
+                safe_initial_data.altitude,
+            ]
         prediction_step = 1
 
         calculations = open("predictedOutput.csv", "w")
@@ -900,14 +903,16 @@ class Worker(QObject):
         azimuth_list = []
         elevation_list = []
 
-        while main_window.is_predicting_track:
+        while self.should_go:
             if (time.time() - timer) > 1:
                 timer = time.time()
-                current_data = [
-                    self.reader.data.latitude,
-                    self.reader.data.longitude,
-                    self.reader.data.altitude,
-                ]
+                safe_data = self.reader.access_lora_data()
+                if safe_data:
+                    current_data = [
+                        safe_data.latitude,
+                        safe_data.longitude,
+                        safe_data.altitude,
+                    ]
 
                 if newest_location == current_data:
                     # need to predict!
@@ -1003,6 +1008,9 @@ class Worker(QObject):
         calculations.close()
         self.finished.emit()
         return
+
+    def stop(self):
+        self.should_go = False
 
 
 if __name__ == "__main__":
