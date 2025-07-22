@@ -3,7 +3,10 @@ import dataclasses
 import re
 from difflib import Match
 
-from typing import Optional
+from typing import Optional, Callable, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from main import MainWindow
 
 import serial
 import threading
@@ -51,7 +54,7 @@ class LoraReader(threading.Thread):
     def __init__(
         self,
         port: str,
-        window,
+        window: "MainWindow",
         baudrate: int = 115200,
         callback=None,
         gps_callback=None,
@@ -74,7 +77,7 @@ class LoraReader(threading.Thread):
         """
 
         super().__init__()
-        self.window = window
+        self.window: "MainWindow" = window
         self.data_lock = threading.Lock()
         self.data: LoraDataObject = None
         self.serial_port = serial.Serial(port=port, baudrate=baudrate, timeout=1)
