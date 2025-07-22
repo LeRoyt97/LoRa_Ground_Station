@@ -20,7 +20,7 @@ class LoraDataObject:
     containing position data and transmission metadata for balloon tracking.
 
     Attributes:
-        malformed: Bool indicating if packet contains invalid chars
+        malformed: Bool indicating if the lora string was parsable
         raw_lora_string: The passed LoRa string
         identifier_one: Primary identifier string for the transmitter
         latitude: Geographic latitude in decimal degrees (-90 to +90)
@@ -56,17 +56,17 @@ class LoraReader(threading.Thread):
         port: str,
         window: "MainWindow",
         baudrate: int = 115200,
-        callback=None,
-        gps_callback=None,
+        callback: Callable[[str], None] = None,
+        gps_callback: Callable[[str], None] = None,
     ) -> None:
         """Initialize LoRa reader thread.
 
         Args:
             port: Serial port identifier (e.g., 'COM3', '/dev/ttyUSB0')
-            baudrate: Serial communication baud rate, defaults to 115200
-            callback: Optional callback object with emit() method for data forwarding
-            gps_callback: Callback to store a GPSPoint
             window: handle to window class
+            baudrate: Serial communication baud rate, defaults to 115200
+            callback: Callback object with emit() method for data forwarding
+            gps_callback: Callback to store a GPSPoint
 
         Raises:
             serial.SerialException: If serial port cannot be opened or configured
@@ -80,9 +80,12 @@ class LoraReader(threading.Thread):
         self.window: "MainWindow" = window
         self.data_lock = threading.Lock()
         self.data: LoraDataObject = None
-        self.serial_port = serial.Serial(port=port, baudrate=baudrate, timeout=1)
         self.callback = callback
         self.is_running: Bool = True
+        try:
+            self.serial_port = serial.Serial(port=port, baudrate=baudrate, timeout=1)
+        except serial.SerialException as err:
+            self.window.status_box_callback(f"Error opening serial port: {err}")
 
     def run(self) -> None:
         """Main thread execution loop for continuous LoRa data reception.
