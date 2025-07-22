@@ -1,23 +1,34 @@
-#include <LoRa.h>
-#include <SPI.h>
+#include "LoRa.h"
+#include "SPI.h"
 
+// Hardware configuration constants
+#define LORA_CS     A5                // LoRa chip select pin
+#define LORA_RST    A4                // LoRa reset pin
+#define LORA_DIO0   A3                // LoRa DIO0 interrupt pin
 
+// Communication protocol constants
+#define SERIAL_BAUD_RATE 115200       // Serial communication with Python host (bps)
+#define LORA_FREQUENCY 915E6          // LoRa frequency (Hz)
+#define LORA_TX_POWER 20              // LoRa transmit power (dBm)
+#define LORA_SPREADING_FACTOR 12      // LoRa spreading factor (7-12)
+#define LORA_BANDWIDTH 62500          // LoRa signal bandwidth (Hz)
+#define LORA_CODING_RATE 8            // LoRa coding rate denominator
+#define LORA_SYNC_WORD 0xF3           // LoRa network sync word
+#define LORA_INIT_RETRIES 5           // Number of LoRa initialization attempts
+#define LORA_RETRY_DELAY_MS 1000      // Delay between initialization retries (ms)
+#define PACKET_REPEAT_COUNT 7         // Number of command packets to send
+#define PACKET_DELAY_MS 50            // Delay between packet transmissions (ms)
 
-// // LoRa pins For Feather M0 Adalogger. Remeber to connect MISO, MOSI, SCK also.
-#define LORA_CS     A5
-#define LORA_RST    A4
-#define LORA_DIO0   A3
+// Transmission window protocol
+#define ID_BIT1 0                     // Index of first ID bit in received packet
+#define Tx_ID '1'                     // Character indicating TX window is open
+#define Tx_time 10000                 // TX window duration (ms)
 
-// ID BITS to check for Tx window
-#define ID_BIT1 0                     // ID_BIT1 index
-#define Tx_ID '1'                     // ID value to signal Tx mode
-#define Tx_time 10000                 // Tx window length
-
-// Command Definitions
-#define IDLE "00000000"
-#define CUT "11111111"
-#define OPEN "22222222"
-#define CLOSE "33333333"
+// Balloon command definitions
+#define IDLE "00000000"               // Keep balloon in idle state
+#define CUT "11111111"                // Cut parachute/balloon separation
+#define OPEN "22222222"               // Open vent valve for gas release
+#define CLOSE "33333333"              // Close vent valve to retain gas
 
 // Declare Variables
 unsigned long Tx_mark = 0;              // Marks time zero
@@ -27,28 +38,49 @@ String packet = "";
 String cmd = "";
 bool Tx_window_changed = true;          // Window Change notification
 bool wait_for_next_Tx_window = true;    // If sent in the middle of Tx wait till next window
-int number_of_packets = 7;              // Number of packets to send. Indexed from 1!!
+int number_of_packets = PACKET_REPEAT_COUNT; // Number of command packets to send
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(SERIAL_BAUD_RATE);
   while (!Serial);
   delay(1000);
   Serial.println("***************LoRa Ground Station****************");
 
-// **************************Initialize LoRa **************************
-  long LoraFreq = 915E6; // LoRa Frequency
+// **************************Initialize LoRa with retry strategy **************************
   LoRa.setPins(LORA_CS, LORA_RST, LORA_DIO0);
-  if (!LoRa.begin(LoraFreq)) {
-    Serial.println("LoRa init Failed!");
+  
+  bool lora_initialized = false;
+  for (int attempt = 1; attempt <= LORA_INIT_RETRIES; attempt++) {
+    Serial.print("LoRa initialization attempt ");
+    Serial.print(attempt);
+    Serial.print("/");
+    Serial.println(LORA_INIT_RETRIES);
+    
+    if (LoRa.begin(LORA_FREQUENCY)) {
+      lora_initialized = true;
+      Serial.println("LoRa initialization successful!");
+      break;
+    }
+    
+    if (attempt < LORA_INIT_RETRIES) {
+      Serial.println("LoRa init failed, retrying in 1 second...");
+      delay(LORA_RETRY_DELAY_MS);
+    }
+  }
+  
+  if (!lora_initialized) {
+    Serial.println("CRITICAL: LoRa initialization failed after 5 attempts");
+    Serial.println("Check: Hardware connections, power supply, module compatibility");
+    Serial.println("SYSTEM HALTED - Reset required after fixing hardware");
     while(1);
   }
 
 // **************************LoRa Settings **************************
-  LoRa.setTxPower(20);
-  LoRa.setSpreadingFactor(12);
-  LoRa.setSignalBandwidth(62.5E3);
-  LoRa.setCodingRate4(8);
-  LoRa.setSyncWord(0xF3);
+  LoRa.setTxPower(LORA_TX_POWER);
+  LoRa.setSpreadingFactor(LORA_SPREADING_FACTOR);
+  LoRa.setSignalBandwidth(LORA_BANDWIDTH);
+  LoRa.setCodingRate4(LORA_CODING_RATE);
+  LoRa.setSyncWord(LORA_SYNC_WORD);
   // LoRa.enableCrc();
   
 
@@ -100,7 +132,7 @@ void loop() {
   }
 
 
-  // **************************Check for keyboard input**************************
+  // **************************Check for command input from Python host**************************
   if (Serial.available()) {
     cmd = Serial.readStringUntil('\n');
     cmd.trim(); // Remove whitespace and newlines
@@ -144,7 +176,7 @@ void idleCmd() {
     Serial.print("                ");
     Serial.print(packetSendCount);
     Serial.println(" Packets sent");
-    delay(50);
+    delay(PACKET_DELAY_MS);
   }
 
   packetSendCount = 1;
@@ -171,7 +203,7 @@ void cutCmd() {
     Serial.print("                ");
     Serial.print(packetSendCount);
     Serial.println(" Packets sent");
-    delay(50);
+    delay(PACKET_DELAY_MS);
   }
 
   packetSendCount = 1;
@@ -196,7 +228,7 @@ void openCmd() {
     Serial.print("                ");
     Serial.print(packetSendCount);
     Serial.println(" Packets sent");
-    delay(50);
+    delay(PACKET_DELAY_MS);
   }
 
   packetSendCount = 1;
@@ -221,7 +253,7 @@ void closeCmd() {
     Serial.print("                ");
     Serial.print(packetSendCount);
     Serial.println(" Packets sent");
-    delay(50);
+    delay(PACKET_DELAY_MS);
   }
 
   packetSendCount = 1;
