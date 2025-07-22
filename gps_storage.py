@@ -4,7 +4,7 @@ import json
 import os
 import re
 from datetime import datetime, timezone
-from typing import List, Optional, Union, Dict
+from typing import List, Optional, Union, Dict, Callable
 from dataclasses import field
 from lora_reader import LoraDataObject
 
@@ -41,6 +41,26 @@ CREATE TABLE packet_records (
 CREATE INDEX idx_packet_timestamp ON packet_records(receive_timestamp);
 """
 
+@dataclasses.dataclass
+class GPSPoint:
+    """Container for timestamped GPS telemetry data.
+
+    Represents a single GPS measurement from balloon telemetry with validation
+    status and computed metrics for flight path analysis.
+
+    Attributes:
+        timestamp: UTC timestamp when GPS point was received (ISO format string)
+        lora_data: Complete LoRa telemetry packet containing GPS coordinates
+        is_valid: Whether GPS coordinates passed validation checks
+        velocity: Computed ground speed in m/s from previous point (optional)
+        distance_from_previous: Distance in meters from last valid point (optional)
+    """
+
+    lora_data: LoraDataObject
+    timestamp: str = "N/A"
+    is_valid: bool = True
+    velocity: Optional[float] = None
+    distance_from_previous: Optional[float] = None
 
 @dataclasses.dataclass
 class PacketRecord:
@@ -66,29 +86,6 @@ class PacketRecord:
     signal_quality: Optional[Dict[str, float]] = None  # {'rssi': -85, 'snr': 8.5}
     validation_errors: List[str] = field(default_factory=list)
     ground_station_location: Optional[dict] = None  # {'lat': float, 'lon': float}
-
-
-@dataclasses.dataclass
-class GPSPoint:
-    """Container for timestamped GPS telemetry data.
-
-    Represents a single GPS measurement from balloon telemetry with validation
-    status and computed metrics for flight path analysis.
-
-    Attributes:
-        timestamp: UTC timestamp when GPS point was received (ISO format string)
-        lora_data: Complete LoRa telemetry packet containing GPS coordinates
-        is_valid: Whether GPS coordinates passed validation checks
-        velocity: Computed ground speed in m/s from previous point (optional)
-        distance_from_previous: Distance in meters from last valid point (optional)
-    """
-
-    timestamp: str = "N/A"
-    lora_data: LoraDataObject
-    is_valid: bool = True
-    velocity: Optional[float] = None
-    distance_from_previous: Optional[float] = None
-
 
 class FlightTracker:
     """GPS track storage and management for balloon flight operations.
