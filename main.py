@@ -32,6 +32,12 @@ from sun_position import sunpos
 
 # todo: calculate distance from balloon
 
+# todo: LeRoy: Longer cable for LoRa or use wireless ESP32
+# todo: LeRoy: sun sight
+# todo: LeRoy: onboard gps
+# todo: LeRoy: arrow key controls
+# todo: LeRoy: make all prints append to the statusBox, not settext
+
 
 class MainWindow(QMainWindow):
     log_signal = pyqtSignal(str)
@@ -203,7 +209,9 @@ class MainWindow(QMainWindow):
         ):
             try:
                 selected_port = self.arduino_port_names[selected_index]
-                self.ground_station_arduino = GroundStationArduino(selected_port, 9600)
+                self.ground_station_arduino = GroundStationArduino(
+                    selected_port, baudrate=9600
+                )
                 print("After ground_station_arduino init", self.ground_station_arduino)
                 self.statusBox.append(f"Connected to {selected_port}!")
                 self.is_arduino_connected = True
@@ -733,9 +741,9 @@ class MainWindow(QMainWindow):
             elevation: Target elevation in degrees
         """
         # this displays the outputs from the tracking threads on the GUI
-        self.distanceDisplay.toPlainText(str(distance))
-        self.azimuthDisplay.toPlainText(str(azimuth))
-        self.elevationDisplay.toPlainText(str(elevation))
+        self.distanceDisplay.setPlainText(str(distance))
+        self.azimuthDisplay.setPlainText(str(azimuth))
+        self.elevationDisplay.setPlainText(str(elevation))
         return
 
     def closeEvent(self, event) -> None:
