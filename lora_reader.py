@@ -216,6 +216,10 @@ class LoraReader(threading.Thread):
 class LoRaCommandSender:
     # todo: LeRoy: Make the python side of this method smarter and make the arduino dumber.
     # todo: LeRoy: Particularly in handling Tx window monitoring.
+
+    # todo: LeRoy: Bug: If nothing is being received over LoRa, sending a command returns the "will wait for Tx window"
+    #  message, but then starts trying to send anyway. Not sure if this is really a bad thing, but it is unintentional.
+    #  Likely a problem within the arduino side of the code.
     """Prints command string to the serial monitor for the LoRa Arduino to collect and handle."""
 
     def __init__(self, serial_port):

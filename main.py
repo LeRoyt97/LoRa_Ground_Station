@@ -315,11 +315,14 @@ class MainWindow(QMainWindow):
                 self.command = "CLOSE"
             case _:
                 self.command = packet
-
-        if hasattr(self, "lora_command_sender"):
+        # todo: LeRoy: Clicking a command when no LoRa port is selected returns the exception statement when there is no lora
+        # todo: LeRoy: port connected, instead of reaching the else statement.
+        if hasattr(self, "lora_command_sender") and self.is_lora_listening == True:
             try:
-                self.lora_command_sender.send_command(packet)
+                self.lora_command_sender.send_command(packet=packet)
                 self.statusBox.append(f"Sending command: {self.command}")
+            except TypeError as err:
+                self.statusBox.append(f"Type Error: {err}")
             except Exception as err:
                 self.statusBox.append(f"Failed to send {self.command}: {err}")
         else:
