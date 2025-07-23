@@ -43,11 +43,12 @@ class GroundStationArduino:
         Args:
             com_port: Serial port identifier (e.g., 'COM3', '/dev/ttyUSB0')
             baudrate: Serial communication baud rate for Arduino connection
-            
+
         Raises:
             serial.SerialException: If serial port cannot be opened or configured
         """
-        self.com_port = serial.Serial(port=com_port, baudrate=baudrate, timeout=.1)
+        # self.window = window
+        self.com_port = serial.Serial(port=com_port, baudrate=baudrate, timeout=0.1)
         self.coordinates = []
         self.attempt_number = 0
         return
@@ -61,7 +62,7 @@ class GroundStationArduino:
         Args:
             azimuth: Target azimuth angle in degrees (0-360)
             elevation: Target elevation angle in degrees (0-90)
-            
+
         Note:
             SAFETY CRITICAL: Commands physical antenna movement. Ensure clear
             antenna path and proper calibration before use. Invalid coordinates
@@ -69,10 +70,13 @@ class GroundStationArduino:
         """
         # takes in azimuth and elevation to move to
         # sends position to arduino
-        position_command = "M" + str(azimuth) + "," + str(elevation)
-        print(position_command)
-        self.com_port.write(bytes(position_command, "utf-8"))
-        time.sleep(.05)
+        try:
+            position_command = "M" + str(azimuth) + "," + str(elevation)
+            print(position_command)
+            self.com_port.write(bytes(position_command, "utf-8"))
+            time.sleep(0.05)
+        except Exception as err:
+            print(f"move_position error: {err}")
         return
 
     def adjust_tilt_up(self, degrees: str) -> None:
@@ -82,7 +86,7 @@ class GroundStationArduino:
 
         Args:
             degrees: Number of degrees to tilt upward (string format)
-            
+
         Raises:
             Exception: On serial communication failure (handled gracefully)
         """
@@ -93,7 +97,7 @@ class GroundStationArduino:
         except Exception as e:
             print(f"Serial write error: {e}")
         print(message)
-        time.sleep(.05)
+        time.sleep(0.05)
         return
 
     def adjust_tilt_down(self, degrees: str) -> None:
@@ -103,7 +107,7 @@ class GroundStationArduino:
 
         Args:
             degrees: Number of degrees to tilt downward (string format)
-            
+
         Raises:
             Exception: On serial communication failure (handled gracefully)
         """
@@ -113,7 +117,7 @@ class GroundStationArduino:
             self.com_port.write(bytes(message, "utf-8"))
         except Exception as e:
             print(f"Serial write error: {e}")
-        time.sleep(.05)
+        time.sleep(0.05)
         return
 
     def adjust_pan_positive(self, degrees: str) -> None:
@@ -123,7 +127,7 @@ class GroundStationArduino:
 
         Args:
             degrees: Number of degrees to pan positively (string format)
-            
+
         Raises:
             Exception: On serial communication failure (handled gracefully)
         """
@@ -133,7 +137,7 @@ class GroundStationArduino:
             self.com_port.write(bytes(message, "utf-8"))
         except Exception as e:
             print(f"Serial write error: {e}")
-        time.sleep(.05)
+        time.sleep(0.05)
         return
 
     def adjust_pan_negative(self, degrees: str) -> None:
@@ -143,7 +147,7 @@ class GroundStationArduino:
 
         Args:
             degrees: Number of degrees to pan negatively (string format)
-            
+
         Raises:
             Exception: On serial communication failure (handled gracefully)
         """
@@ -153,7 +157,7 @@ class GroundStationArduino:
             self.com_port.write(bytes(message, "utf-8"))
         except Exception as e:
             print(f"Serial write error: {e}")
-        time.sleep(.05)
+        time.sleep(0.05)
         return
 
     def calibrate(self, starting_azimuth: float, starting_elevation: float) -> None:
@@ -165,7 +169,7 @@ class GroundStationArduino:
         Args:
             starting_azimuth: Known reference azimuth in degrees (typically sun position)
             starting_elevation: Known reference elevation in degrees (typically sun position)
-            
+
         Note:
             REQUIRED before tracking operations. Typically calibrated using sun
             position with solar sight. Improper calibration results in tracking
@@ -174,7 +178,7 @@ class GroundStationArduino:
         # sends the arduino the initial starting position (azimuth and elevation) of the ground station
         starting_position = "C" + str(starting_azimuth) + "," + str(starting_elevation)
         self.com_port.write(bytes(starting_position, "utf-8"))
-        time.sleep(.05)
+        time.sleep(0.05)
         return
 
     def send_emergency_stop(self) -> None:
@@ -189,7 +193,7 @@ class GroundStationArduino:
             Always investigate cause before restarting system.
         """
         self.com_port.write(bytes("E", "utf-8"))
-        time.sleep(.1)
+        time.sleep(0.1)
         return
 
     def warm_start(self) -> list:
@@ -200,7 +204,7 @@ class GroundStationArduino:
 
         Returns:
             list: Ground station coordinates [latitude, longitude, altitude]
-            
+
         Note:
             GPS accuracy affects tracking precision. Ensure clear sky view
             and allow time for GPS fix before beginning tracking operations.
@@ -217,11 +221,11 @@ class GroundStationArduino:
 
         Returns:
             list: GPS coordinates [latitude, longitude, altitude] or empty list on failure
-            
+
         Raises:
             UnicodeDecodeError: On malformed GPS data (handled gracefully)
             ValueError: On coordinate conversion errors (handled gracefully)
-            
+
         Note:
             Critical for tracking accuracy. Retries up to 100 times for GPS fix.
             Coordinate errors affect ground station pointing calculations and
@@ -230,17 +234,19 @@ class GroundStationArduino:
         # attempts to obtain and return the ground station gps location
         if self.attempt_number < 100:
             self.attempt_number += 1
-            self.com_port.write(b'G')
+            self.com_port.write(b"G")
             time.sleep(0.05)
             serial_data = self.com_port.readline()
             if len(serial_data) > 2:
-                decoded_data = serial_data[:-2].decode('ascii')
+                decoded_data = serial_data[:-2].decode("ascii")
                 if len(decoded_data.split(",")) == 3:
                     self.coordinates = []
                     temporary_coordinates = decoded_data.split(",")
                     # S and W negative
                     for index in range(2):
-                        self.coordinates.append(float(temporary_coordinates[index][:-1]))
+                        self.coordinates.append(
+                            float(temporary_coordinates[index][:-1])
+                        )
                     self.coordinates.append(float(temporary_coordinates[2]))
                     # print(self.attempt_number, " Attempts")
                     self.attempt_number = 0
@@ -266,5 +272,9 @@ class GroundStationArduino:
         # prints the gps coordinates of the ground station after a request to grab the position
         self.coordinates = self.request_gps_location()
         if len(self.coordinates) > 0:
-            print("[{},{},{}]".format(self.coordinates[0], self.coordinates[1], self.coordinates[2]))
+            print(
+                "[{},{},{}]".format(
+                    self.coordinates[0], self.coordinates[1], self.coordinates[2]
+                )
+            )
         return
