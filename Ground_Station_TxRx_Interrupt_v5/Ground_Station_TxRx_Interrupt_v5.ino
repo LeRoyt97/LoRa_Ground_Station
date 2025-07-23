@@ -8,17 +8,6 @@
 #define LORA_RST    A4
 #define LORA_DIO0   A3
 
-// ID BITS to check for Tx window
-#define ID_BIT1 0                     // ID_BIT1 index
-#define Tx_ID '1'                     // ID value to signal Tx mode
-#define Tx_time 10000                 // Tx window length
-
-// Command Definitions
-#define IDLE "00000000"
-#define CUT "11111111"
-#define OPEN "22222222"
-#define CLOSE "33333333"
-
 // Declare Variables
 unsigned long Tx_mark = 0;              // Marks time zero
 bool Tx_ok = false;                     // Are we in the Tx window: true or false
@@ -28,6 +17,19 @@ String command = "";
 bool Tx_window_changed = true;          // Window Change notification
 bool wait_for_next_Tx_window = true;    // If sent in the middle of Tx wait till next window
 int number_of_packets = 7;              // Number of packets to send. Indexed from 1!!
+
+// ID BITS to check for Tx window
+#define ID_BIT1 0                       // ID_BIT1 index
+#define ID_BIT2 packet.length()-1       // ID_BIT2 index
+#define Tx_ID '1'                       // ID value to signal Tx mode
+#define Tx_time 10000                   // Tx window length
+
+// Command Definitions
+#define IDLE "00000000"
+#define CUT "11111111"
+#define OPEN "22222222"
+#define CLOSE "33333333"
+
 
 void setup() {
   Serial.begin(115200);
@@ -75,7 +77,7 @@ void loop() {
 
 
   // **************************Check ID_BITs for Tx window **************************
-  if (packet[ID_BIT1] ==  Tx_ID && packet[packet.length()-1] ==  Tx_ID && wait_for_next_Tx_window==true) {
+  if (packet[ID_BIT1] ==  Tx_ID && packet[ID_BIT2] ==  Tx_ID && wait_for_next_Tx_window==true) {
     if (Tx_window_changed == true) {
       Serial.println("Tx window now open");
       Tx_window_changed = false;
@@ -100,7 +102,7 @@ void loop() {
     command.trim(); // Remove whitespace and newlines
     command.toUpperCase(); // Make it case-insensitive
 
-    if (packet[ID_BIT1] ==  Tx_ID && packet[packet.length()-1] ==  Tx_ID) {   // If in Tx window, wait until next window
+    if (packet[ID_BIT1] ==  Tx_ID && packet[ID_BIT2] ==  Tx_ID) {   // If in Tx window, wait until next window
       if (command == "CUT" or command == "OPEN" or command == "CLOSE" or command == "IDLE") {
         Serial.print("\nWaiting untill next Tx Window to send");
         Serial.println("");
