@@ -104,7 +104,6 @@ class MainWindow(QMainWindow):
 
         # === Connect Command Buttons and Variables ===
         self.command = None
-
         self.IdleCommandButton.clicked.connect(
             lambda: self.try_send_command("00000000")
         )
@@ -709,7 +708,7 @@ class MainWindow(QMainWindow):
         # this stops the tracking thread, thus stopping the tracking
         if self.worker:
             self.worker.stop()
-        
+
         self.is_predicting_track = False
         self.startButton.setEnabled(True)
         self.predictionStartButton.setEnabled(True)

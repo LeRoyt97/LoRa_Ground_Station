@@ -141,11 +141,9 @@ class LoraReader(threading.Thread):
         # Skip lines with any forbidden characters
         if not re.match(r"^[\w\s:.,+-]*$", line):
             print(
-                f"Ignored malformed line (bad characters): {line}"
+                "Ignored malformed line (bad characters)"
             )  # todo: make this info more useful. Count lines and calculate % of lines that are bad?
-            self.window.statusBox.append(
-                f"Ignored malformed line (bad characters): {line}"
-            )
+            self.window.statusBox.append("Ignored malformed line (bad characters):")
             return None
 
         fields = line.split(":")
