@@ -269,7 +269,7 @@ class FlightTracker:
             return [point for point in self.current_session_points if point.is_valid]
 
     def start_new_flight(
-        self, flight_notes: str = "N/A", store_old_invalid: bool = False
+        self, flight_notes: str = "N/A", store_old_invalid: bool = True
     ) -> bool:
         """Begin new flight session and archive current track data.
 
@@ -292,7 +292,7 @@ class FlightTracker:
         Note:
             Current flight data is permanently saved before reset.
             Ensure all analysis is complete before calling this method.
-            By default does not store invalid entries.
+            By default does store invalid entries.
         """
         if not re.match(r"^[\w -]*$", flight_notes):
             raise ValueError(
