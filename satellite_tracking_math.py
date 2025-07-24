@@ -111,8 +111,8 @@ class TrackingMath:
             ),
             2,
         )
-        self.distance = math.sqrt(component_a + component_b + component_c)
-        return self.distance
+        distance = math.sqrt(component_a + component_b + component_c)
+        return distance
 
     def elevation(self) -> float:
         """Calculate elevation angle from ground station to target.

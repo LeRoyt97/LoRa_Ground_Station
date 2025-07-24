@@ -1,5 +1,6 @@
 from lora_reader import LoRaCommandSender
 from gps_storage import FlightTracker
+import math
 import csv
 import datetime
 import os
@@ -11,15 +12,22 @@ import copy
 import serial
 import serial.tools.list_ports
 import serial.tools.list_ports
-from PyQt5.QtCore import pyqtSignal, QObject, QThread
+from PyQt5.QtCore import pyqtSignal, QObject, QThread, QUrl
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.uic import loadUi
+from PyQt5.QtWebEngineWidgets import QWebEngineView
+
+import folium
+import tempfile
+
+from typing import Optional
 
 from ground_station_arduino import GroundStationArduino
 
 # from lora_reader import LoRaCommandSender
 from lora_reader import LoraReader
 from satellite_tracking_math import TrackingMath
+from gps_storage import FlightTracker, GPSPoint
 from sun_position import sunpos
 
 
@@ -28,6 +36,8 @@ from sun_position import sunpos
 # todo:tariq Map stuff
 
 # todo: calculate distance from balloon
+
+
 
 
 class MainWindow(QMainWindow):
@@ -58,6 +68,12 @@ class MainWindow(QMainWindow):
             },
             status_box_callback="status_box_callback",
         )
+
+        self.map_widget = MapWidget()
+        layout = self.mapContainer.parent().layout()
+        layout.replaceWidget(self.mapContainer, self.map_widget)
+        self.mapContainer.deleteLater()
+
         self.reader: LoraReader = None
         self.lora_command_sender = None
         self.ground_station_arduino: GroundStationArduino = None
@@ -77,13 +93,6 @@ class MainWindow(QMainWindow):
         self.is_predicting_track = False
         self.is_tracking = False
 
-        # === Ground Station Parameters ===
-        self.GroundStationArduino = None
-        self.ground_station_latitude = None
-        self.ground_station_longitude = None
-        self.ground_station_altitude = None
-        self.starting_azimuth = None
-        self.starting_elevation = None
 
         # === Connect ComboBox Refreshes ===
         self.refresh_ports(self.LoRaComboBox, self.lora_port_names, "lora")
@@ -802,7 +811,7 @@ class Worker(QObject):
     finished = pyqtSignal()
     calculation_signal = pyqtSignal(float, float, float)
 
-    def __init__(self, lora_reader: LoraReader, ground_station_coords: Dict) -> None:
+    def __init__(self, lora_reader: LoraReader, ground_station_coords: dict) -> None:
         """Initialize worker thread for tracking operations.
 
         Args:
@@ -1057,6 +1066,63 @@ class Worker(QObject):
 
     def stop(self) -> None:
         self.should_go = False
+        return None
+
+class MapWidget(QWebEngineView):
+    def __init__(
+        self, 
+        ground_station_coords: tuple[float, float, float], 
+        parent=None
+    ) -> None:
+        super().__init__(parent)
+        self.setMinimumSize(400, 300)
+
+        self.ground_station_coords = ground_station_coords
+
+        # Display mode settings
+        self.display_mode = "both"  # "markers_only", "flight_path", "both"
+        self.last_balloon_position = None
+
+        # Initialize with empty map
+        self.create_map()
+
+    def position_changed_enough(
+           self,
+           old_gps: GPSPoint,
+           new_gps: GPSPoint,
+           threshold_meters: Optional[int] = 50
+    ) -> bool:
+        '''
+        todo:tariq use notes/validation for more robust updating, for now
+                   distance works
+        '''
+        if not isinstance(old_gps, GPSPoint) or not isinstance(new_gps, GPSPoint):
+            raise TypeError("old_gps and new_gps both must be of type GPSPoint")
+
+         
+        # using tracking math for distance between gps points
+        tracking_math = TrackingMath(
+                old_gps.lora_data.latitude, 
+                old_gps.lora_data.longitude,
+                0,
+                new_gps.lora_data.latitude, 
+                new_gps.lora_data.longitude,
+                0,
+        )
+
+        return tracking_math.distance > threshold_meters
+
+    def create_map(self) -> None:
+        """Create initial map centered on default location"""
+        starting_location = (self.ground_station_coords[0], self.ground_station_coords[1])
+        my_map = folium.Map(location=starting_location, zoom_start=10)
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.html')
+        my_map.save(temp_file.name)
+        self.load(QUrl.fromLocalFile(temp_file.name))
+        return None
+
+    def update_map(self) -> None:
+        return None       
 
 
 if __name__ == "__main__":
