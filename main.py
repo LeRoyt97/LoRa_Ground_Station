@@ -38,8 +38,6 @@ from sun_position import sunpos
 # todo: calculate distance from balloon
 
 
-
-
 class MainWindow(QMainWindow):
     log_signal = pyqtSignal(str)
 
@@ -59,7 +57,7 @@ class MainWindow(QMainWindow):
         self.ground_station_altitude = None
         self.starting_azimuth = None
         self.starting_elevation = None
-    
+
         self.ms_between_map_updates = 500
         self.last_map_gps_point: Optional[GPSPoint] = None
 
@@ -72,10 +70,7 @@ class MainWindow(QMainWindow):
             status_box_callback="status_box_callback",
         )
 
-        self.map_widget = MapWidget(
-            parent=self,
-            flight_tracker=self.flight_tracker
-        )
+        self.map_widget = MapWidget(parent=self, flight_tracker=self.flight_tracker)
         layout = self.mapContainer.parent().layout()
         layout.replaceWidget(self.mapContainer, self.map_widget)
         self.mapContainer.deleteLater()
@@ -464,7 +459,7 @@ class MainWindow(QMainWindow):
                 self.map_widget.create_base_map(
                     coordinates=(
                         self.ground_station_latitude,
-                        self.ground_station_longitude
+                        self.ground_station_longitude,
                     )
                 )
                 # start timer for updating maps
@@ -783,7 +778,7 @@ class MainWindow(QMainWindow):
         if self.reader:
             self.reader.stop()
             self.reader.join(timeout=5.0)
-        result =  self.flight_tracker.end_flight()
+        result = self.flight_tracker.end_flight()
         if result:
             self.statusBox.append("Flight session ended.")
         event.accept()
@@ -828,18 +823,20 @@ class MainWindow(QMainWindow):
             raise
 
         return None
-    
+
     def check_for_map_update(self) -> None:
+        self.statusBox.append("Checking for map update")
         recent_points = self.flight_tracker.get_recent_valid_points(n=1)
 
         if recent_points:
-            latest_point = recent_points[0] # do this because get_recent_valid_points returns a list
-            if not self.last_map_gps_point: # first point ever
+            latest_point = recent_points[
+                0
+            ]  # do this because get_recent_valid_points returns a list
+            if not self.last_map_gps_point:  # first point ever
                 self.update_map_from_tracker()
                 self.last_map_gps_point = latest_point
             elif self.map_widget.position_changed_enough(
-                    old_gps=self.last_map_gps_point, 
-                    new_gps=latest_point
+                old_gps=self.last_map_gps_point, new_gps=latest_point
             ):
                 self.map_widget.update_map_from_tracker()
 
@@ -847,10 +844,11 @@ class MainWindow(QMainWindow):
 
     def update_map_from_tracker(self) -> None:
         points = self.flight_tracker.get_full_history()
-        coord_pairs = [(point.lora_data.latitude, point.lora_data.longitude) for point in points]
+        coord_pairs = [
+            (point.lora_data.latitude, point.lora_data.longitude) for point in points
+        ]
         self.map_widget.update_map(coord_pairs)
         return None
-
 
 
 class Worker(QObject):
@@ -1115,9 +1113,10 @@ class Worker(QObject):
         self.should_go = False
         return None
 
+
 class MapWidget(QWebEngineView):
     def __init__(
-        self, 
+        self,
         flight_tracker: FlightTracker,
         parent=None,
     ) -> None:
@@ -1134,96 +1133,91 @@ class MapWidget(QWebEngineView):
         self.create_base_map()
 
     def position_changed_enough(
-        self,
-        old_gps: GPSPoint,
-        new_gps: GPSPoint,
-        threshold_meters: Optional[int] = 50
+        self, old_gps: GPSPoint, new_gps: GPSPoint, threshold_meters: Optional[int] = 50
     ) -> bool:
-        '''
+        """
         todo:tariq use notes/validation for more robust updating, for now
                    distance works
-        '''
+        """
         if not isinstance(old_gps, GPSPoint) or not isinstance(new_gps, GPSPoint):
             raise TypeError("old_gps and new_gps both must be of type GPSPoint")
-         
+
         # using tracking math for distance between gps points
         tracking_math = TrackingMath(
-                old_gps.lora_data.latitude, 
-                old_gps.lora_data.longitude,
-                0,
-                new_gps.lora_data.latitude, 
-                new_gps.lora_data.longitude,
-                0,
+            old_gps.lora_data.latitude,
+            old_gps.lora_data.longitude,
+            0,
+            new_gps.lora_data.latitude,
+            new_gps.lora_data.longitude,
+            0,
         )
 
         return tracking_math.distance > threshold_meters
 
     def create_base_map(
-            self,
-            coordinates: Optional[tuple[float, float]] = (45.665, -111.065)
+        self, coordinates: Optional[tuple[float, float]] = (45.665, -111.065)
     ) -> None:
         """
         Create map centered on the passed Lat, Long tuple
         Defaults to borealis lab
         """
         self.base_map = Map(location=coordinates, zoom_start=10)
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.html')
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
         self.base_map.save(temp_file.name)
         self.load(QUrl.fromLocalFile(temp_file.name))
         return None
 
     def update_map(
         self,
-        points: list[tuple[float,
-        float]],
-        mode: str = "line",
-        line_color: Optional[str] = 'green',
-        marker_color: Optional[str] = 'blue'
+        points: list[tuple[float, float]],
+        mode: str = "markers",
+        line_color: Optional[str] = "green",
+        marker_color: Optional[str] = "blue",
     ) -> None:
         self.current_map = copy.deepcopy(self.base_map)
         match mode:
             case "line":
                 PolyLine(
-                    locations = points.insert(0, self.current_map.location),
-                    color = line_color,
-                    weight = 3,
-                    opacity = 0.7,
-                    popup = f"Flight: {self.tracker.current_flight_id}"
+                    locations=points.insert(0, self.current_map.location),
+                    color=line_color,
+                    weight=3,
+                    opacity=0.7,
+                    popup=f"Flight: {self.tracker.current_flight_id}",
                 ).add_to(self.current_map)
             case "markers":
                 Marker(
                     location=self.current_map.location,
                     popup="Ground Station",
                     tooltip="Ground Station",
-                    icon=folium.Icon(color='red', icon='info-sign')
+                    icon=folium.Icon(color="red", icon="info-sign"),
                 ).add_to(current_map)
                 for idx in range(len(points)):
                     Marker(
                         location=points[idx],
                         popup=f"Balloon Position {idx}",
                         tooltip=f"Balloon Position {idx}",
-                        icon=folium.Icon(color='blue', icon='cloud')
+                        icon=folium.Icon(color="blue", icon="cloud"),
                     ).add_to(self.current_map)
             case "both":
                 PolyLine(
-                    locations = points.insert(0, self.current_map.location),
-                    color = line_color,
-                    weight = 3,
-                    opacity = 0.7,
-                    popup = f"Flight: {self.tracker.current_flight_id}"
+                    locations=points.insert(0, self.current_map.location),
+                    color=line_color,
+                    weight=3,
+                    opacity=0.7,
+                    popup=f"Flight: {self.tracker.current_flight_id}",
                 ).add_to(self.current_map)
                 for idx in range(len(points)):
                     Marker(
                         location=points[idx],
                         popup=f"Balloon Position {idx}",
                         tooltip=f"Balloon Position {idx}",
-                        icon=folium.Icon(color='blue', icon='cloud')
+                        icon=folium.Icon(color="blue", icon="cloud"),
                     ).add_to(self.current_map)
 
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.html')
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
         self.base_map.save(temp_file.name)
         self.load(QUrl.fromLocalFile(temp_file.name))
-        return None       
+        return None
 
 
 if __name__ == "__main__":
