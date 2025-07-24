@@ -42,13 +42,21 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__()
         loadUi("LoRa_Designer.ui", self)
 
+        # === Ground Station Parameters ===
+        self.GroundStationArduino = None
+        self.ground_station_latitude = None
+        self.ground_station_longitude = None
+        self.ground_station_altitude = None
+        self.starting_azimuth = None
+        self.starting_elevation = None
+
         # === Hardware Interfaces and Threads ===
         self.flight_tracker = FlightTracker(
             ground_station_coords={
                 "lat": self.ground_station_latitude,
                 "lon": self.ground_station_longitude,
             },
-            status_box_callback=status_box_callback,
+            status_box_callback="status_box_callback",
         )
         self.reader: LoraReader = None
         self.lora_command_sender = None
