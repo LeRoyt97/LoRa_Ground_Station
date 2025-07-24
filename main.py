@@ -12,12 +12,12 @@ import copy
 import serial
 import serial.tools.list_ports
 import serial.tools.list_ports
-from PyQt5.QtCore import pyqtSignal, QObject, QThread, QUrl
+from PyQt5.QtCore import pyqtSignal, QObject, QThread, QUrl, QTimer
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.uic import loadUi
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 
-import folium
+from folium import Map, Marker, PolyLine
 import tempfile
 
 from typing import Optional
@@ -27,7 +27,7 @@ from ground_station_arduino import GroundStationArduino
 # from lora_reader import LoRaCommandSender
 from lora_reader import LoraReader
 from satellite_tracking_math import TrackingMath
-from gps_storage import FlightTracker, GPSPoint
+from gps_storage import FlightTracker, GPSPoint, FlightInitializationError
 from sun_position import sunpos
 
 
@@ -59,6 +59,9 @@ class MainWindow(QMainWindow):
         self.ground_station_altitude = None
         self.starting_azimuth = None
         self.starting_elevation = None
+    
+        self.ms_between_map_updates = 500
+        self.last_map_gps_point: Optional[GPSPoint] = None
 
         # === Hardware Interfaces and Threads ===
         self.flight_tracker = FlightTracker(
@@ -69,15 +72,20 @@ class MainWindow(QMainWindow):
             status_box_callback="status_box_callback",
         )
 
-        self.map_widget = MapWidget()
+        self.map_widget = MapWidget(
+            parent=self,
+            flight_tracker=self.flight_tracker
+        )
         layout = self.mapContainer.parent().layout()
         layout.replaceWidget(self.mapContainer, self.map_widget)
         self.mapContainer.deleteLater()
+        self.map_update_timer = QTimer()
+        self.map_update_timer.timeout.connect(self.check_for_map_update)
 
         self.reader: LoraReader = None
-        self.lora_command_sender = None
+        self.lora_command_sender: LoRaCommandSender = None
         self.ground_station_arduino: GroundStationArduino = None
-        self.track_thread = None
+        self.track_thread: threading.Thread = None
         self.worker: Worker = None
 
         # === Serial Port Management ===
@@ -92,7 +100,6 @@ class MainWindow(QMainWindow):
         self.is_lora_listening = False
         self.is_predicting_track = False
         self.is_tracking = False
-
 
         # === Connect ComboBox Refreshes ===
         self.refresh_ports(self.LoRaComboBox, self.lora_port_names, "lora")
@@ -449,6 +456,20 @@ class MainWindow(QMainWindow):
                 self.statusBox.append("Ground station location entered successfully!")
                 self.is_ground_station_location_set = True
 
+                # start new flight
+                started_new_flight = self.flight_tracker.start_new_flight()
+                if not started_new_flight:
+                    raise FlightInitializationError("Could not start new flight.")
+                # update map to be centered at ground station
+                self.map_widget.create_base_map(
+                    coordinates=(
+                        self.ground_station_latitude,
+                        self.ground_station_longitude
+                    )
+                )
+                # start timer for updating maps
+                self.map_update_timer.start(self.ms_between_map_updates)
+
             else:
                 self.statusBox.append("Please connect arduino")
                 self.is_ground_station_location_set = False
@@ -762,6 +783,9 @@ class MainWindow(QMainWindow):
         if self.reader:
             self.reader.stop()
             self.reader.join(timeout=5.0)
+        result =  self.flight_tracker.end_flight()
+        if result:
+            self.statusBox.append("Flight session ended.")
         event.accept()
 
     def clear_serial(self) -> None:
@@ -804,6 +828,29 @@ class MainWindow(QMainWindow):
             raise
 
         return None
+    
+    def check_for_map_update(self) -> None:
+        recent_points = self.flight_tracker.get_recent_valid_points(n=1)
+
+        if recent_points:
+            latest_point = recent_points[0] # do this because get_recent_valid_points returns a list
+            if not self.last_map_gps_point: # first point ever
+                self.update_map_from_tracker()
+                self.last_map_gps_point = latest_point
+            elif self.map_widget.position_changed_enough(
+                    old_gps=self.last_map_gps_point, 
+                    new_gps=latest_point
+            ):
+                self.map_widget.update_map_from_tracker()
+
+        return None
+
+    def update_map_from_tracker(self) -> None:
+        points = self.flight_tracker.get_full_history()
+        coord_pairs = [(point.lora_data.latitude, point.lora_data.longitude) for point in points]
+        self.map_widget.update_map(coord_pairs)
+        return None
+
 
 
 class Worker(QObject):
@@ -1071,26 +1118,26 @@ class Worker(QObject):
 class MapWidget(QWebEngineView):
     def __init__(
         self, 
-        ground_station_coords: tuple[float, float, float], 
-        parent=None
+        flight_tracker: FlightTracker,
+        parent=None,
     ) -> None:
         super().__init__(parent)
-        self.setMinimumSize(400, 300)
 
-        self.ground_station_coords = ground_station_coords
+        self.tracker = flight_tracker
 
         # Display mode settings
-        self.display_mode = "both"  # "markers_only", "flight_path", "both"
-        self.last_balloon_position = None
+        self.base_map: Map = None
+        self.current_map: Map = None
+        self.points: List[Optional[tuple[float, float]]] = []
 
-        # Initialize with empty map
-        self.create_map()
+        # Initialize with map centered at lab
+        self.create_base_map()
 
     def position_changed_enough(
-           self,
-           old_gps: GPSPoint,
-           new_gps: GPSPoint,
-           threshold_meters: Optional[int] = 50
+        self,
+        old_gps: GPSPoint,
+        new_gps: GPSPoint,
+        threshold_meters: Optional[int] = 50
     ) -> bool:
         '''
         todo:tariq use notes/validation for more robust updating, for now
@@ -1098,7 +1145,6 @@ class MapWidget(QWebEngineView):
         '''
         if not isinstance(old_gps, GPSPoint) or not isinstance(new_gps, GPSPoint):
             raise TypeError("old_gps and new_gps both must be of type GPSPoint")
-
          
         # using tracking math for distance between gps points
         tracking_math = TrackingMath(
@@ -1112,16 +1158,71 @@ class MapWidget(QWebEngineView):
 
         return tracking_math.distance > threshold_meters
 
-    def create_map(self) -> None:
-        """Create initial map centered on default location"""
-        starting_location = (self.ground_station_coords[0], self.ground_station_coords[1])
-        my_map = folium.Map(location=starting_location, zoom_start=10)
+    def create_base_map(
+            self,
+            coordinates: Optional[tuple[float, float]] = (45.665, -111.065)
+    ) -> None:
+        """
+        Create map centered on the passed Lat, Long tuple
+        Defaults to borealis lab
+        """
+        self.base_map = Map(location=coordinates, zoom_start=10)
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.html')
-        my_map.save(temp_file.name)
+        self.base_map.save(temp_file.name)
         self.load(QUrl.fromLocalFile(temp_file.name))
         return None
 
-    def update_map(self) -> None:
+    def update_map(
+        self,
+        points: list[tuple[float,
+        float]],
+        mode: str = "line",
+        line_color: Optional[str] = 'green',
+        marker_color: Optional[str] = 'blue'
+    ) -> None:
+        self.current_map = copy.deepcopy(self.base_map)
+        match mode:
+            case "line":
+                PolyLine(
+                    locations = points.insert(0, self.current_map.location),
+                    color = line_color,
+                    weight = 3,
+                    opacity = 0.7,
+                    popup = f"Flight: {self.tracker.current_flight_id}"
+                ).add_to(self.current_map)
+            case "markers":
+                Marker(
+                    location=self.current_map.location,
+                    popup="Ground Station",
+                    tooltip="Ground Station",
+                    icon=folium.Icon(color='red', icon='info-sign')
+                ).add_to(current_map)
+                for idx in range(len(points)):
+                    Marker(
+                        location=points[idx],
+                        popup=f"Balloon Position {idx}",
+                        tooltip=f"Balloon Position {idx}",
+                        icon=folium.Icon(color='blue', icon='cloud')
+                    ).add_to(self.current_map)
+            case "both":
+                PolyLine(
+                    locations = points.insert(0, self.current_map.location),
+                    color = line_color,
+                    weight = 3,
+                    opacity = 0.7,
+                    popup = f"Flight: {self.tracker.current_flight_id}"
+                ).add_to(self.current_map)
+                for idx in range(len(points)):
+                    Marker(
+                        location=points[idx],
+                        popup=f"Balloon Position {idx}",
+                        tooltip=f"Balloon Position {idx}",
+                        icon=folium.Icon(color='blue', icon='cloud')
+                    ).add_to(self.current_map)
+
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.html')
+        self.base_map.save(temp_file.name)
+        self.load(QUrl.fromLocalFile(temp_file.name))
         return None       
 
 
