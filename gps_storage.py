@@ -358,6 +358,53 @@ class FlightTracker:
             print(error_msg)
             return False
 
+    def end_flight() -> bool:
+        if not self.current_flight_id:
+            return False  # No active flight, nothing to do
+
+        try:
+            # Save any remaining data, update end_time, etc.
+            cursor = self.db.cursor()
+            cursor.execute(
+                "UPDATE flights SET end_time = ? WHERE flight_id = ?",
+                (datetime.now(timezone.utc).isoformat(), self.current_flight_id)
+            )
+            points = self.get_full_history(include_invalid=True)
+            for point in points:
+                validation_errors = []
+                if point.lora_data.malformed:
+                    validation_errors.append("Invalid LoRa String.")
+                elif not self._validate_gps_point(point.lora_data):
+                    validation_errors.append("Invalid GPS information.")
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO packet_records 
+                    (flight_id, receive_timestamp, raw_packet, latitude, longitude, 
+                     altitude, rssi, snr, validation_errors)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        self.current_flight_id,
+                        point.timestamp,
+                        point.lora_data.raw_lora_string,
+                        point.lora_data.latitude,
+                        point.lora_data.longitude,
+                        point.lora_data.altitude,
+                        point.lora_data.rssi,
+                        point.lora_data.snr,
+                        json.dumps(validation_errors),
+                    ),
+                )
+            self.db.commit()
+
+            # Clear current session
+            self.current_flight_id = None
+            self.current_session_points = []
+            return True
+        except sqlite3.Error as err:
+            print(f"Error ending flight: {err}")
+            return False
+
     def export_track(
         self,
         format: str = "gpx",
@@ -643,7 +690,6 @@ class FlightTracker:
         """
 
         try:
-            # todo:tariq i have this current_flight_id that isnt getting set anywhere
             if not self.current_session_points or not self.current_flight_id:
                 return True  # Nothing to backup
 
