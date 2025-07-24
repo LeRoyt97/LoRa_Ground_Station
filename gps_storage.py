@@ -161,7 +161,7 @@ class FlightTracker:
         timestamp = datetime.now(timezone.utc).isoformat()
 
         # Validate GPS coordinates
-        is_valid = self._validate_gps_point(lora_data)
+        is_valid = not lora_data.malformed or self._validate_gps_point(lora_data)
 
         if not is_valid:
             raise ValueError(
