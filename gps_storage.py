@@ -57,7 +57,7 @@ class GPSPoint:
     """
 
     lora_data: LoraDataObject
-    timestamp: str = "N/A"
+    timestamp: str = "NA"
     is_valid: bool = True
     velocity: Optional[float] = None
     distance_from_previous: Optional[float] = None

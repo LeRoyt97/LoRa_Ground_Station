@@ -38,14 +38,14 @@ class LoraDataObject:
     """
 
     malformed: bool = False
-    raw_lora_string: str = "N/A"
-    identifier_one: str = "N/A"
+    raw_lora_string: str = "NA"
+    identifier_one: str = "NA"
     latitude: float = 0.0
     longitude: float = 0.0
     altitude: float = 0.0
-    last_sent: str = "N/A"
-    last_complete: str = "N/A"
-    identifier_two: str = "N/A"
+    last_sent: str = "NA"
+    last_complete: str = "NA"
+    identifier_two: str = "NA"
     rssi: float = 0.0
     snr: float = 0.0
 
