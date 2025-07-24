@@ -813,6 +813,11 @@ p, li { white-space: pre-wrap; }
        <attribute name="title">
         <string>Map</string>
        </attribute>
+       <layout class="QVBoxLayout" name="mapTabLayout">
+        <item>
+         <widget class="QWidget" name="mapContainer" native="true"/>
+        </item>
+       </layout>
       </widget>
       <widget class="QWidget" name="BalloonCommandsTab">
        <attribute name="title">
