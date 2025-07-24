@@ -87,6 +87,12 @@ class PacketRecord:
     validation_errors: List[str] = field(default_factory=list)
     ground_station_location: Optional[dict] = None  # {'lat': float, 'lon': float}
 
+class FlightInitializationError(Exception):
+    pass
+
+class FlightTerminationError(Exception):
+    pass
+
 class FlightTracker:
     """GPS track storage and management for balloon flight operations.
 
