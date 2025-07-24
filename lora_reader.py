@@ -81,7 +81,7 @@ class LoraReader(threading.Thread):
         self.data_lock = threading.Lock()
         self.data: LoraDataObject = None
         self.callback = callback
-        self.is_running: Bool = True
+        self.is_running: bool = True
         try:
             self.serial_port = serial.Serial(port=port, baudrate=baudrate, timeout=1)
         except serial.SerialException as err:
