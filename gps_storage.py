@@ -269,7 +269,7 @@ class FlightTracker:
             return [point for point in self.current_session_points if point.is_valid]
 
     def start_new_flight(
-        self, flight_notes: str = "N/A", store_old_invalid: bool = True
+        self, flight_notes: str = "NA", store_old_invalid: bool = True
     ) -> bool:
         """Begin new flight session and archive current track data.
 
