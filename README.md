@@ -1,3 +1,9 @@
+# LoRa Ground Station
+
+## LeRoy Thompson
+
+## 7/29/2025
+
 Modified version of the Ground-Tracking-Station software created by Mathew Clutter (2021) for use with Montana Space Grant Consortium's BOREALIS high altitude ballooning program. The program was modified to be compatible with a LoRa-only balloon configuration, and does not require use of the IRIDIUM satellite service.
 
 
@@ -28,9 +34,9 @@ https://github.com/LeRoyt97/LoRa\_Ground\_Station/tree/master
 
 ### Graphical User Interface (GUI):
 
-PyQt5 was used to create the GUI: 
+PyQt5 was used to create the GUI:
 
-&nbsp;	https://pypi.org/project/PyQt5/
+ 	https://pypi.org/project/PyQt5/
 
 
 
@@ -42,19 +48,17 @@ PyQt5 Designer is a useful tool that allows for drag and drop of various widgets
 
 File location confusion:
 
-&nbsp;	The Designer.exe file can be hard to find after finishing the pip install. I found it by navigating to the following directory and then searching for "designer.exe":
+ 	The Designer.exe file can be hard to find after finishing the pip install. I found it by navigating to the following directory and then searching for "designer.exe":
 
 
 
-&nbsp;	C:\\Users\\%username%\\AppData\\Local\\Programs\\Python\\Python39\\Lib\\site-packages
+ 	C:\\Users\\%username%\\AppData\\Local\\Programs\\Python\\Python39\\Lib\\site-packages
 
-&nbsp;			^					^
+ 			^					^
 
-&nbsp;			| Your Username				| Python version; yours may be different.
-
-
-
-&nbsp;	
+ 			| Your Username				| Python version; yours may be different.
 
 
+
+ 
 
